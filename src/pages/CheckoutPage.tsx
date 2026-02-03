@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useProduct } from '@/hooks/useProduct';
 import { useCities, useSameCityZones, useCrossCityFee } from '@/hooks/useCities';
 import { PageLoader } from '@/components/ui/PageLoader';
@@ -14,6 +14,15 @@ import type { BuyerInfo } from '@/lib/types';
 export default function CheckoutPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  
+  // Persist affiliate ref in sessionStorage on checkout load
+  useEffect(() => {
+    const ref = searchParams.get('ref');
+    if (ref) {
+      sessionStorage.setItem('afrilink_affiliate', ref);
+    }
+  }, [searchParams]);
   
   const { data: product, isLoading: productLoading, error: productError } = useProduct(slug || '');
   const { data: cities = [], isLoading: citiesLoading } = useCities();
