@@ -9,6 +9,7 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { Button } from '@/components/ui/button';
 import { ShoppingBag } from 'lucide-react';
 import { formatPrice } from '@/lib/format';
+import { getProductUrl, getAppUrl } from '@/lib/url';
 
 export default function ProductPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -42,21 +43,31 @@ export default function ProductPage() {
     navigate(checkoutUrl);
   };
 
-  // SEO meta tags for WhatsApp share preview
+  // SEO meta tags for WhatsApp share preview - use canonical production URL
   const metaImage = product.images?.[0] || '/placeholder.svg';
   const metaDescription = product.short_description || product.description?.slice(0, 160) || product.name;
+  const canonicalUrl = getProductUrl(product.slug);
+  const appUrl = getAppUrl();
+  
+  // Make image URL absolute for social sharing
+  const absoluteImageUrl = metaImage.startsWith('http') 
+    ? metaImage 
+    : `${appUrl}${metaImage.startsWith('/') ? metaImage : '/' + metaImage}`;
 
   return (
     <>
       <Helmet>
         <title>{product.name} | AfriLink</title>
         <meta name="description" content={metaDescription} />
+        <link rel="canonical" href={canonicalUrl} />
         
-        {/* Open Graph for WhatsApp/Social */}
+        {/* Open Graph for WhatsApp/Social - using canonical production URL */}
         <meta property="og:title" content={product.name} />
         <meta property="og:description" content={metaDescription} />
-        <meta property="og:image" content={metaImage} />
+        <meta property="og:image" content={absoluteImageUrl} />
+        <meta property="og:url" content={canonicalUrl} />
         <meta property="og:type" content="product" />
+        <meta property="og:site_name" content="AfriLink" />
         <meta property="product:price:amount" content={String(product.price)} />
         <meta property="product:price:currency" content="TZS" />
         
@@ -64,7 +75,7 @@ export default function ProductPage() {
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={product.name} />
         <meta name="twitter:description" content={metaDescription} />
-        <meta name="twitter:image" content={metaImage} />
+        <meta name="twitter:image" content={absoluteImageUrl} />
       </Helmet>
 
       <div className="min-h-screen flex flex-col">
