@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { useProduct } from '@/hooks/useProduct';
 import { useAffiliateTracking } from '@/hooks/useAffiliateTracking';
@@ -13,6 +13,7 @@ import { formatPrice } from '@/lib/format';
 export default function ProductPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { data: product, isLoading, error, refetch } = useProduct(slug || '');
   
   // Track affiliate click (idempotent)
@@ -33,7 +34,12 @@ export default function ProductPage() {
   }
 
   const handleBuyNow = () => {
-    navigate(`/checkout/${product.slug}`);
+    // Forward ref param to checkout for affiliate attribution
+    const ref = searchParams.get('ref');
+    const checkoutUrl = ref 
+      ? `/checkout/${product.slug}?ref=${encodeURIComponent(ref)}`
+      : `/checkout/${product.slug}`;
+    navigate(checkoutUrl);
   };
 
   // SEO meta tags for WhatsApp share preview
