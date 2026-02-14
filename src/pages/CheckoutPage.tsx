@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useProduct } from '@/hooks/useProduct';
-import { useCities, useSameCityZones, useCrossCityFee } from '@/hooks/useCities';
 import { PageLoader } from '@/components/ui/PageLoader';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { CheckoutHeader } from '@/components/checkout/CheckoutHeader';
 import { BuyerForm } from '@/components/checkout/BuyerForm';
-import { DeliveryFeeSection } from '@/components/checkout/DeliveryFeeSection';
 import { OrderSummary } from '@/components/checkout/OrderSummary';
 import { PaymentButton } from '@/components/checkout/PaymentButton';
 import type { BuyerInfo } from '@/lib/types';
@@ -25,38 +23,22 @@ export default function CheckoutPage() {
   }, [searchParams]);
   
   const { data: product, isLoading: productLoading, error: productError } = useProduct(slug || '');
-  const { data: cities = [], isLoading: citiesLoading } = useCities();
 
   // Buyer info state
   const [buyerInfo, setBuyerInfo] = useState<BuyerInfo>({
     name: '',
     phone: '',
-    cityId: '',
+    city: '',
     area: '',
     landmark: '',
     notes: '',
   });
 
-  // Delivery calculation
-  const vendorCityId = null; // Vendor city not available in shared schema
-  const isSameCity = vendorCityId === buyerInfo.cityId && !!buyerInfo.cityId;
-  
-  const { data: zones = [] } = useSameCityZones(isSameCity ? buyerInfo.cityId : null);
-  const { data: crossCityFee } = useCrossCityFee(vendorCityId, buyerInfo.cityId);
-
-  // Selected zone for same-city delivery
-  const [selectedZoneId, setSelectedZoneId] = useState<string>('');
-  const selectedZone = zones.find(z => z.id === selectedZoneId);
-
-  // Calculate delivery fee
-  const deliveryFee = isSameCity
-    ? (selectedZone?.fee || 0)
-    : (crossCityFee?.fee || 0);
-
   const itemPrice = product?.price || 0;
+  const deliveryFee = 0; // Delivery fee handled separately by vendor
   const totalAmount = itemPrice + deliveryFee;
 
-  if (productLoading || citiesLoading) {
+  if (productLoading) {
     return <PageLoader message="Loading checkout..." />;
   }
 
@@ -85,26 +67,11 @@ export default function CheckoutPage() {
 
       {/* Form */}
       <div className="flex-1 p-4 space-y-6">
-        {/* Buyer Details */}
         <BuyerForm
           buyerInfo={buyerInfo}
           onChange={setBuyerInfo}
-          cities={cities}
         />
 
-        {/* Delivery Fee */}
-        <DeliveryFeeSection
-          isSameCity={isSameCity}
-          zones={zones}
-          selectedZoneId={selectedZoneId}
-          onZoneSelect={setSelectedZoneId}
-          crossCityFee={crossCityFee?.fee || null}
-          vendorCityId={vendorCityId}
-          buyerCityId={buyerInfo.cityId}
-          cities={cities}
-        />
-
-        {/* Order Summary */}
         <OrderSummary
           itemPrice={itemPrice}
           deliveryFee={deliveryFee}
@@ -118,7 +85,6 @@ export default function CheckoutPage() {
         buyerInfo={buyerInfo}
         deliveryFee={deliveryFee}
         totalAmount={totalAmount}
-        selectedZoneId={isSameCity ? selectedZoneId : undefined}
         onSuccess={handleOrderSuccess}
       />
     </div>

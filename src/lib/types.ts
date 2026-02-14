@@ -53,7 +53,7 @@ export interface Affiliate {
 export interface BuyerInfo {
   name: string;
   phone: string;
-  cityId: string;
+  city: string;
   area: string;
   landmark: string;
   notes: string;
