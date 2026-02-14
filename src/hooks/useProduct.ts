@@ -8,17 +8,8 @@ export function useProduct(slug: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select(`
-          *,
-          vendor:vendors(
-            id,
-            name,
-            city_id,
-            city:cities(id, name)
-          )
-        `)
+        .select('*')
         .eq('slug', slug)
-        .eq('is_active', true)
         .maybeSingle();
 
       if (error) {
