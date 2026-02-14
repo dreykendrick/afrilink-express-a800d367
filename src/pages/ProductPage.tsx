@@ -44,8 +44,8 @@ export default function ProductPage() {
   };
 
   // SEO meta tags for WhatsApp share preview - use canonical production URL
-  const metaImage = product.images?.[0] || '/placeholder.svg';
-  const metaDescription = product.short_description || product.description?.slice(0, 160) || product.name;
+  const metaImage = product.image_urls?.[0] || product.image_url || '/placeholder.svg';
+  const metaDescription = product.description?.slice(0, 160) || product.title;
   const canonicalUrl = getProductUrl(product.slug);
   const appUrl = getAppUrl();
   
@@ -57,12 +57,12 @@ export default function ProductPage() {
   return (
     <>
       <Helmet>
-        <title>{product.name} | AfriLink</title>
+        <title>{product.title} | AfriLink</title>
         <meta name="description" content={metaDescription} />
         <link rel="canonical" href={canonicalUrl} />
         
         {/* Open Graph for WhatsApp/Social - using canonical production URL */}
-        <meta property="og:title" content={product.name} />
+        <meta property="og:title" content={product.title} />
         <meta property="og:description" content={metaDescription} />
         <meta property="og:image" content={absoluteImageUrl} />
         <meta property="og:url" content={canonicalUrl} />
@@ -73,14 +73,14 @@ export default function ProductPage() {
         
         {/* Twitter Card */}
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={product.name} />
+        <meta name="twitter:title" content={product.title} />
         <meta name="twitter:description" content={metaDescription} />
         <meta name="twitter:image" content={absoluteImageUrl} />
       </Helmet>
 
       <div className="min-h-screen flex flex-col">
         {/* Product Image Carousel */}
-        <ImageCarousel images={product.images} alt={product.name} />
+        <ImageCarousel images={product.image_urls || []} alt={product.title} />
 
         {/* Product Details */}
         <div className="flex-1">

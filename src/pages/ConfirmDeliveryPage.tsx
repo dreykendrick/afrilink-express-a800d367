@@ -59,15 +59,15 @@ export default function ConfirmDeliveryPage() {
       {/* Order Summary */}
       <div className="card-premium p-4 mb-4">
         <div className="flex items-center gap-3">
-          {order.product?.images?.[0] && (
+          {(order.product?.image_urls?.[0] || order.product?.image_url) && (
             <img
-              src={order.product.images[0]}
-              alt={order.product.name}
+              src={order.product.image_urls?.[0] || order.product.image_url!}
+              alt={order.product.title}
               className="w-16 h-16 rounded-lg object-cover bg-secondary"
             />
           )}
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm truncate">{order.product?.name}</p>
+            <p className="font-medium text-sm truncate">{order.product?.title}</p>
             <p className="text-xs text-muted-foreground">Order #{order.order_number}</p>
           </div>
         </div>
