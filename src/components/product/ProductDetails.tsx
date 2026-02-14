@@ -19,13 +19,13 @@ export function ProductDetails({ product }: ProductDetailsProps) {
         <p className="text-2xl font-bold text-primary">
           {formatPrice(product.price)}
         </p>
-        <h1 className="text-xl font-semibold leading-tight">{product.name}</h1>
+        <h1 className="text-xl font-semibold leading-tight">{product.title}</h1>
       </div>
 
-      {/* Short Description */}
-      {product.short_description && (
+      {/* Category */}
+      {product.category && (
         <p className="text-muted-foreground leading-relaxed">
-          {product.short_description}
+          {product.category}
         </p>
       )}
 

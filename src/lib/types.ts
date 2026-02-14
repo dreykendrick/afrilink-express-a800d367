@@ -32,13 +32,15 @@ export interface Product {
   id: string;
   vendor_id: string;
   slug: string;
-  name: string;
+  title: string;
   price: number;
   description: string | null;
-  short_description: string | null;
-  images: string[];
-  is_active: boolean;
-  vendor?: Vendor;
+  category: string | null;
+  image_url: string | null;
+  image_urls: string[];
+  status: string;
+  is_available: boolean;
+  commission: number | null;
 }
 
 export interface Affiliate {

@@ -38,7 +38,7 @@ export default function CheckoutPage() {
   });
 
   // Delivery calculation
-  const vendorCityId = product?.vendor?.city_id || null;
+  const vendorCityId = null; // Vendor city not available in shared schema
   const isSameCity = vendorCityId === buyerInfo.cityId && !!buyerInfo.cityId;
   
   const { data: zones = [] } = useSameCityZones(isSameCity ? buyerInfo.cityId : null);
