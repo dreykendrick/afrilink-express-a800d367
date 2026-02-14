@@ -12,13 +12,12 @@ export function useOrder(orderId: string) {
           *,
           product:products(
             id,
-            name,
+            title,
             slug,
             price,
-            images,
-            vendor:vendors(id, name)
-          ),
-          buyer_city:cities(id, name)
+            image_url,
+            image_urls
+          )
         `)
         .eq('id', orderId)
         .maybeSingle();
@@ -49,12 +48,12 @@ export function useOrderByToken(orderId: string, token: string) {
           *,
           product:products(
             id,
-            name,
+            title,
             slug,
             price,
-            images
-          ),
-          buyer_city:cities(id, name)
+            image_url,
+            image_urls
+          )
         `)
         .eq('id', orderId)
         .eq('confirmation_token', token)

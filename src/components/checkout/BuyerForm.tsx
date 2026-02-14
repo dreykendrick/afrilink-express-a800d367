@@ -2,22 +2,14 @@ import { User, Phone, MapPin, MessageSquare } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import type { BuyerInfo, City } from '@/lib/types';
+import type { BuyerInfo } from '@/lib/types';
 
 interface BuyerFormProps {
   buyerInfo: BuyerInfo;
   onChange: (info: BuyerInfo) => void;
-  cities: City[];
 }
 
-export function BuyerForm({ buyerInfo, onChange, cities }: BuyerFormProps) {
+export function BuyerForm({ buyerInfo, onChange }: BuyerFormProps) {
   const updateField = (field: keyof BuyerInfo, value: string) => {
     onChange({ ...buyerInfo, [field]: value });
   };
@@ -62,25 +54,17 @@ export function BuyerForm({ buyerInfo, onChange, cities }: BuyerFormProps) {
 
       {/* City */}
       <div className="space-y-2">
-        <Label className="flex items-center gap-2 text-muted-foreground">
+        <Label htmlFor="city" className="flex items-center gap-2 text-muted-foreground">
           <MapPin className="w-4 h-4" />
           City
         </Label>
-        <Select
-          value={buyerInfo.cityId}
-          onValueChange={(value) => updateField('cityId', value)}
-        >
-          <SelectTrigger className="h-12 bg-secondary border-0">
-            <SelectValue placeholder="Select your city" />
-          </SelectTrigger>
-          <SelectContent className="bg-popover border-border">
-            {cities.map((city) => (
-              <SelectItem key={city.id} value={city.id}>
-                {city.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Input
+          id="city"
+          placeholder="e.g. Dar es Salaam"
+          value={buyerInfo.city}
+          onChange={(e) => updateField('city', e.target.value)}
+          className="h-12"
+        />
       </div>
 
       {/* Area/Street */}

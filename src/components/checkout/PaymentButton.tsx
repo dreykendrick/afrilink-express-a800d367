@@ -11,7 +11,6 @@ interface PaymentButtonProps {
   buyerInfo: BuyerInfo;
   deliveryFee: number;
   totalAmount: number;
-  selectedZoneId?: string;
   onSuccess: (orderId: string) => void;
 }
 
@@ -20,7 +19,6 @@ export function PaymentButton({
   buyerInfo,
   deliveryFee,
   totalAmount,
-  selectedZoneId,
   onSuccess,
 }: PaymentButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
@@ -37,14 +35,11 @@ export function PaymentButton({
     if (!isValidTanzaniaPhone(buyerInfo.phone)) {
       return 'Please enter a valid Tanzania phone number';
     }
-    if (!buyerInfo.cityId) {
-      return 'Please select your city';
+    if (!buyerInfo.city.trim()) {
+      return 'Please enter your city';
     }
     if (!buyerInfo.area.trim()) {
       return 'Please enter your area or street';
-    }
-    if (deliveryFee === 0 && !selectedZoneId) {
-      return 'Please select a delivery zone';
     }
     return null;
   };
@@ -94,7 +89,7 @@ export function PaymentButton({
           affiliate_id: affiliateId,
           buyer_name: buyerInfo.name.trim(),
           buyer_phone: normalizePhone(buyerInfo.phone),
-          buyer_city_id: buyerInfo.cityId,
+          buyer_city_id: buyerInfo.city.trim(),
           buyer_area: buyerInfo.area.trim(),
           buyer_landmark: buyerInfo.landmark.trim() || null,
           buyer_notes: buyerInfo.notes.trim() || null,
