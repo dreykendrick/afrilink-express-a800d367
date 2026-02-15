@@ -6,17 +6,24 @@ export function useOrder(orderId: string) {
   return useQuery({
     queryKey: ['order', orderId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('orders')
         .select(`
           *,
-          product:products(
+          order_items(
             id,
-            title,
-            slug,
+            product_id,
+            quantity,
             price,
-            image_url,
-            image_urls
+            commission_amount,
+            product:products(
+              id,
+              title,
+              slug,
+              price,
+              image_url,
+              image_urls
+            )
           )
         `)
         .eq('id', orderId)
@@ -34,7 +41,7 @@ export function useOrder(orderId: string) {
       return data as unknown as Order;
     },
     enabled: !!orderId,
-    refetchInterval: 5000, // Poll for status updates
+    refetchInterval: 5000,
   });
 }
 
@@ -42,17 +49,24 @@ export function useOrderByToken(orderId: string, token: string) {
   return useQuery({
     queryKey: ['order', orderId, 'token', token],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('orders')
         .select(`
           *,
-          product:products(
+          order_items(
             id,
-            title,
-            slug,
+            product_id,
+            quantity,
             price,
-            image_url,
-            image_urls
+            commission_amount,
+            product:products(
+              id,
+              title,
+              slug,
+              price,
+              image_url,
+              image_urls
+            )
           )
         `)
         .eq('id', orderId)

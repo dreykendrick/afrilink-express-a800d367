@@ -1,33 +1,5 @@
 // AfriLink Checkout Types
 
-export interface City {
-  id: string;
-  name: string;
-}
-
-export interface SameCityZone {
-  id: string;
-  city_id: string;
-  zone_name: string;
-  fee: number;
-}
-
-export interface CrossCityFee {
-  id: string;
-  from_city_id: string;
-  to_city_id: string;
-  fee: number;
-}
-
-export interface Vendor {
-  id: string;
-  name: string;
-  phone: string;
-  city_id: string | null;
-  address: string | null;
-  city?: City;
-}
-
 export interface Product {
   id: string;
   vendor_id: string;
@@ -43,15 +15,9 @@ export interface Product {
   commission: number | null;
 }
 
-export interface Affiliate {
-  id: string;
-  code: string;
-  name: string;
-  commission_rate: number;
-}
-
 export interface BuyerInfo {
   name: string;
+  email: string;
   phone: string;
   city: string;
   area: string;
@@ -59,32 +25,41 @@ export interface BuyerInfo {
   notes: string;
 }
 
-export type PaymentStatus = 'pending' | 'confirmed' | 'failed' | 'refunded';
-export type OrderStatus = 'pending_payment' | 'paid' | 'preparing' | 'out_for_delivery' | 'delivered' | 'confirmed' | 'cancelled';
+export type PaymentStatus = 'pending_payment' | 'paid' | 'confirmed' | 'failed' | 'refunded';
 
 export interface Order {
   id: string;
-  order_number: string;
-  product_id: string;
-  affiliate_id: string | null;
-  buyer_name: string;
-  buyer_phone: string;
-  buyer_city_id: string;
-  buyer_area: string;
-  buyer_landmark: string | null;
-  buyer_notes: string | null;
-  item_price: number;
+  customer_name: string;
+  customer_email: string;
+  customer_phone: string | null;
+  delivery_address: string | null;
+  delivery_city: string | null;
+  delivery_country: string | null;
+  delivery_type: string | null;
   delivery_fee: number;
   total_amount: number;
-  payment_status: PaymentStatus;
-  order_status: OrderStatus;
+  status: string;
+  affiliate_link_id: string | null;
+  confirmation_token: string | null;
+  payment_status: string;
   vendor_notified_at: string | null;
-  notification_status: string | null;
-  confirmation_token: string;
-  confirmed_at: string | null;
+  buyer_notes: string | null;
+  payment_reference: string | null;
+  checkout_session_id: string | null;
   created_at: string;
+  updated_at: string;
+  // Joined
+  order_items?: OrderItem[];
+}
+
+export interface OrderItem {
+  id: string;
+  order_id: string;
+  product_id: string;
+  quantity: number;
+  price: number;
+  commission_amount: number | null;
   product?: Product;
-  buyer_city?: City;
 }
 
 export interface OrderIssue {

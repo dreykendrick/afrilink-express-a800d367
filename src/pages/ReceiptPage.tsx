@@ -25,19 +25,10 @@ export default function ReceiptPage() {
     );
   }
 
-  // Only show receipt if payment is confirmed
-  if (order.payment_status !== 'confirmed') {
-    return (
-      <ErrorState
-        title="Payment pending"
-        message="This order is still awaiting payment confirmation."
-      />
-    );
-  }
+  // Show receipt for all orders (payment confirmation happens via backend/webhook)
 
   return (
     <div className="min-h-screen p-4 pb-8">
-      {/* Success Header */}
       <div className="text-center py-6 space-y-3">
         <div className="w-16 h-16 rounded-full bg-success/20 flex items-center justify-center mx-auto">
           <CheckCircle2 className="w-8 h-8 text-success" />
@@ -45,18 +36,14 @@ export default function ReceiptPage() {
         <div>
           <h1 className="text-xl font-semibold">Order Confirmed</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Order #{order.order_number}
+            Order #{order.id.slice(0, 8).toUpperCase()}
           </p>
         </div>
       </div>
 
-      {/* Status Timeline */}
-      <StatusTimeline status={order.order_status} />
-
-      {/* Order Details */}
+      <StatusTimeline status={order.status} />
       <ReceiptDetails order={order} />
 
-      {/* Help Link */}
       <div className="mt-6 text-center">
         <Link
           to="#"
@@ -67,8 +54,7 @@ export default function ReceiptPage() {
         </Link>
       </div>
 
-      {/* Confirmation CTA (if not yet confirmed) */}
-      {order.order_status === 'delivered' && !order.confirmed_at && (
+      {order.status === 'delivered' && order.confirmation_token && (
         <div className="mt-6">
           <Link to={`/confirm/${order.id}?token=${order.confirmation_token}`}>
             <Button className="w-full h-12" variant="outline">

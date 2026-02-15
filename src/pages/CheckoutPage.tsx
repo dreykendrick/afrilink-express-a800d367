@@ -14,7 +14,6 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
-  // Persist affiliate ref in sessionStorage on checkout load
   useEffect(() => {
     const ref = searchParams.get('ref');
     if (ref) {
@@ -24,9 +23,9 @@ export default function CheckoutPage() {
   
   const { data: product, isLoading: productLoading, error: productError } = useProduct(slug || '');
 
-  // Buyer info state
   const [buyerInfo, setBuyerInfo] = useState<BuyerInfo>({
     name: '',
+    email: '',
     phone: '',
     city: '',
     area: '',
@@ -35,7 +34,7 @@ export default function CheckoutPage() {
   });
 
   const itemPrice = product?.price || 0;
-  const deliveryFee = 0; // Delivery fee handled separately by vendor
+  const deliveryFee = 0;
   const totalAmount = itemPrice + deliveryFee;
 
   if (productLoading) {
@@ -62,16 +61,10 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen flex flex-col pb-32">
-      {/* Header */}
       <CheckoutHeader product={product} onBack={handleBack} />
 
-      {/* Form */}
       <div className="flex-1 p-4 space-y-6">
-        <BuyerForm
-          buyerInfo={buyerInfo}
-          onChange={setBuyerInfo}
-        />
-
+        <BuyerForm buyerInfo={buyerInfo} onChange={setBuyerInfo} />
         <OrderSummary
           itemPrice={itemPrice}
           deliveryFee={deliveryFee}
@@ -79,7 +72,6 @@ export default function CheckoutPage() {
         />
       </div>
 
-      {/* Payment Button */}
       <PaymentButton
         product={product}
         buyerInfo={buyerInfo}

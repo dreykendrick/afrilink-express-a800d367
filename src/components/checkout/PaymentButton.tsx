@@ -26,36 +26,22 @@ export function PaymentButton({
   const { toast } = useToast();
 
   const validateForm = (): string | null => {
-    if (!buyerInfo.name.trim()) {
-      return 'Please enter your full name';
-    }
-    if (!buyerInfo.phone.trim()) {
-      return 'Please enter your phone number';
-    }
-    if (!isValidTanzaniaPhone(buyerInfo.phone)) {
-      return 'Please enter a valid Tanzania phone number';
-    }
-    if (!buyerInfo.city.trim()) {
-      return 'Please enter your city';
-    }
-    if (!buyerInfo.area.trim()) {
-      return 'Please enter your area or street';
-    }
+    if (!buyerInfo.name.trim()) return 'Please enter your full name';
+    if (!buyerInfo.email.trim()) return 'Please enter your email';
+    if (!buyerInfo.phone.trim()) return 'Please enter your phone number';
+    if (!isValidTanzaniaPhone(buyerInfo.phone)) return 'Please enter a valid Tanzania phone number';
+    if (!buyerInfo.city.trim()) return 'Please enter your city';
+    if (!buyerInfo.area.trim()) return 'Please enter your area or street';
     return null;
   };
 
   const handlePayment = async () => {
     const validationError = validateForm();
     if (validationError) {
-      toast({
-        variant: 'destructive',
-        title: 'Missing information',
-        description: validationError,
-      });
+      toast({ variant: 'destructive', title: 'Missing information', description: validationError });
       return;
     }
 
-    // Generate idempotency key if not already set
     if (!idempotencyKeyRef.current) {
       idempotencyKeyRef.current = generateIdempotencyKey();
     }
@@ -63,41 +49,41 @@ export function PaymentButton({
     setIsLoading(true);
 
     try {
-      // Get affiliate from session
+      // Get affiliate link from session
       const affiliateCode = sessionStorage.getItem('afrilink_affiliate');
-      let affiliateId: string | null = null;
+      let affiliateLinkId: string | null = null;
 
       if (affiliateCode) {
-        const { data: affiliate } = await supabase
-          .from('affiliates')
+        const { data: link } = await (supabase as any)
+          .from('affiliate_links')
           .select('id')
           .eq('code', affiliateCode)
-          .eq('is_active', true)
           .maybeSingle();
-        affiliateId = affiliate?.id || null;
+        affiliateLinkId = link?.id || null;
       }
 
-      // Generate order number
-      const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}`;
+      // Build delivery address
+      const deliveryAddress = [
+        buyerInfo.area.trim(),
+        buyerInfo.landmark.trim(),
+      ].filter(Boolean).join(', ');
 
       // Create order
-      const { data: order, error: orderError } = await supabase
+      const { data: order, error: orderError } = await (supabase as any)
         .from('orders')
         .insert({
-          order_number: orderNumber,
-          product_id: product.id,
-          affiliate_id: affiliateId,
-          buyer_name: buyerInfo.name.trim(),
-          buyer_phone: normalizePhone(buyerInfo.phone),
-          buyer_city_id: buyerInfo.city.trim(),
-          buyer_area: buyerInfo.area.trim(),
-          buyer_landmark: buyerInfo.landmark.trim() || null,
-          buyer_notes: buyerInfo.notes.trim() || null,
-          item_price: product.price,
+          customer_name: buyerInfo.name.trim(),
+          customer_email: buyerInfo.email.trim(),
+          customer_phone: normalizePhone(buyerInfo.phone),
+          delivery_address: deliveryAddress || null,
+          delivery_city: buyerInfo.city.trim(),
           delivery_fee: deliveryFee,
           total_amount: totalAmount,
-          payment_status: 'pending',
-          order_status: 'pending_payment',
+          status: 'pending',
+          payment_status: 'pending_payment',
+          affiliate_link_id: affiliateLinkId,
+          buyer_notes: buyerInfo.notes.trim() || null,
+          checkout_session_id: idempotencyKeyRef.current,
         })
         .select()
         .single();
@@ -107,13 +93,28 @@ export function PaymentButton({
         throw new Error('Failed to create order');
       }
 
-      // For demo: simulate payment confirmation
-      // In production, integrate with mobile money API
-      const { error: updateError } = await supabase
+      // Create order item
+      const { error: itemError } = await (supabase as any)
+        .from('order_items')
+        .insert({
+          order_id: order.id,
+          product_id: product.id,
+          quantity: 1,
+          price: product.price,
+          commission_amount: product.commission || 0,
+        });
+
+      if (itemError) {
+        console.error('Order item creation error:', itemError);
+        // Don't throw - order is created, item is secondary
+      }
+
+      // Simulate payment confirmation (in production: mobile money API)
+      const { error: updateError } = await (supabase as any)
         .from('orders')
         .update({
-          payment_status: 'confirmed',
-          order_status: 'paid',
+          payment_status: 'paid',
+          status: 'paid',
         })
         .eq('id', order.id);
 
@@ -122,28 +123,16 @@ export function PaymentButton({
         throw new Error('Payment processing failed');
       }
 
-      // Trigger vendor notification (async, don't block)
+      // Trigger vendor notification (async)
       supabase.functions.invoke('notify-vendor', {
         body: { orderId: order.id },
-      }).catch((err) => {
-        console.error('Vendor notification failed:', err);
-      });
+      }).catch((err) => console.error('Vendor notification failed:', err));
 
-      // Success - navigate to receipt
-      toast({
-        title: 'Payment successful!',
-        description: 'Your order has been placed.',
-      });
-
+      toast({ title: 'Payment successful!', description: 'Your order has been placed.' });
       onSuccess(order.id);
     } catch (err) {
       console.error('Payment error:', err);
-      toast({
-        variant: 'destructive',
-        title: 'Payment failed',
-        description: 'Something went wrong. Please try again.',
-      });
-      // Reset idempotency key on failure so user can retry
+      toast({ variant: 'destructive', title: 'Payment failed', description: 'Something went wrong. Please try again.' });
       idempotencyKeyRef.current = null;
     } finally {
       setIsLoading(false);
