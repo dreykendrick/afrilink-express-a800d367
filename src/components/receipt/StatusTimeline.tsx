@@ -1,9 +1,8 @@
 import { CheckCircle2, Package, Truck, MapPin, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { OrderStatus } from '@/lib/types';
 
 interface StatusTimelineProps {
-  status: OrderStatus;
+  status: string;
 }
 
 const STATUSES = [
@@ -30,7 +29,6 @@ export function StatusTimeline({ status }: StatusTimelineProps) {
 
           return (
             <div key={step.key} className="flex items-start gap-3 relative">
-              {/* Connector Line */}
               {index < STATUSES.length - 1 && (
                 <div
                   className={cn(
@@ -39,8 +37,6 @@ export function StatusTimeline({ status }: StatusTimelineProps) {
                   )}
                 />
               )}
-
-              {/* Icon */}
               <div
                 className={cn(
                   'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors',
@@ -51,15 +47,8 @@ export function StatusTimeline({ status }: StatusTimelineProps) {
               >
                 <Icon className="w-4 h-4" />
               </div>
-
-              {/* Label */}
               <div className="pb-6">
-                <p
-                  className={cn(
-                    'font-medium text-sm',
-                    isCompleted ? 'text-foreground' : 'text-muted-foreground'
-                  )}
-                >
+                <p className={cn('font-medium text-sm', isCompleted ? 'text-foreground' : 'text-muted-foreground')}>
                   {step.label}
                 </p>
                 {isCurrent && (
@@ -73,7 +62,6 @@ export function StatusTimeline({ status }: StatusTimelineProps) {
           );
         })}
 
-        {/* Confirmation step (special) */}
         {status === 'confirmed' && (
           <div className="flex items-center gap-3 text-success">
             <div className="w-8 h-8 rounded-full bg-success flex items-center justify-center">

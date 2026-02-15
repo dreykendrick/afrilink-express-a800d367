@@ -19,11 +19,10 @@ export function ConfirmDeliveryCard({ order, onConfirmed, onReportIssue }: Confi
     setIsLoading(true);
 
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('orders')
         .update({
-          order_status: 'confirmed',
-          confirmed_at: new Date().toISOString(),
+          status: 'confirmed',
         })
         .eq('id', order.id)
         .eq('confirmation_token', order.confirmation_token);

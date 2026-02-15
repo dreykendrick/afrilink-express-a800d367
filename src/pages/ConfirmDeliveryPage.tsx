@@ -32,18 +32,19 @@ export default function ConfirmDeliveryPage() {
   }
 
   // Already confirmed
-  if (order.confirmed_at || order.order_status === 'confirmed') {
+  if (order.status === 'confirmed') {
     return <ConfirmationSuccess order={order} />;
   }
 
-  // Just confirmed in this session
   if (isConfirmed) {
     return <ConfirmationSuccess order={order} />;
   }
 
+  const firstItem = order.order_items?.[0];
+  const product = firstItem?.product;
+
   return (
     <div className="min-h-screen p-4 pb-8">
-      {/* Warning Header */}
       <div className="text-center py-6 space-y-3">
         <div className="w-16 h-16 rounded-full bg-warning/20 flex items-center justify-center mx-auto">
           <AlertTriangle className="w-8 h-8 text-warning" />
@@ -56,24 +57,22 @@ export default function ConfirmDeliveryPage() {
         </div>
       </div>
 
-      {/* Order Summary */}
       <div className="card-premium p-4 mb-4">
         <div className="flex items-center gap-3">
-          {(order.product?.image_urls?.[0] || order.product?.image_url) && (
+          {(product?.image_urls?.[0] || product?.image_url) && (
             <img
-              src={order.product.image_urls?.[0] || order.product.image_url!}
-              alt={order.product.title}
+              src={product.image_urls?.[0] || product.image_url!}
+              alt={product.title}
               className="w-16 h-16 rounded-lg object-cover bg-secondary"
             />
           )}
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm truncate">{order.product?.title}</p>
-            <p className="text-xs text-muted-foreground">Order #{order.order_number}</p>
+            <p className="font-medium text-sm truncate">{product?.title}</p>
+            <p className="text-xs text-muted-foreground">Order #{order.id.slice(0, 8).toUpperCase()}</p>
           </div>
         </div>
       </div>
 
-      {/* Confirmation Actions */}
       {!showIssueForm ? (
         <ConfirmDeliveryCard
           order={order}

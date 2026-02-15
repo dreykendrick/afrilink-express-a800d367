@@ -1,4 +1,4 @@
-import { User, Phone, MapPin, MessageSquare } from 'lucide-react';
+import { User, Phone, MapPin, MessageSquare, Mail } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -29,6 +29,22 @@ export function BuyerForm({ buyerInfo, onChange }: BuyerFormProps) {
           placeholder="Enter your full name"
           value={buyerInfo.name}
           onChange={(e) => updateField('name', e.target.value)}
+          className="h-12"
+        />
+      </div>
+
+      {/* Email */}
+      <div className="space-y-2">
+        <Label htmlFor="email" className="flex items-center gap-2 text-muted-foreground">
+          <Mail className="w-4 h-4" />
+          Email
+        </Label>
+        <Input
+          id="email"
+          type="email"
+          placeholder="your@email.com"
+          value={buyerInfo.email}
+          onChange={(e) => updateField('email', e.target.value)}
           className="h-12"
         />
       </div>
