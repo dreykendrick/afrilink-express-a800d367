@@ -54,12 +54,13 @@ export function PaymentButton({
       let affiliateLinkId: string | null = null;
 
       if (affiliateCode) {
-        const { data: link } = await (supabase as any)
-          .from('affiliate_links')
+        const { data: affiliate } = await supabase
+          .from('affiliates')
           .select('id')
           .eq('code', affiliateCode)
+          .eq('is_active', true)
           .maybeSingle();
-        affiliateLinkId = link?.id || null;
+        affiliateLinkId = affiliate?.id || null;
       }
 
       // Build delivery address
