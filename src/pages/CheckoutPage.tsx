@@ -10,7 +10,7 @@ import { PaymentButton } from '@/components/checkout/PaymentButton';
 import type { BuyerInfo } from '@/lib/types';
 
 export default function CheckoutPage() {
-  const { slug } = useParams<{ slug: string }>();
+  const { slug: identifier } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
@@ -21,7 +21,7 @@ export default function CheckoutPage() {
     }
   }, [searchParams]);
   
-  const { data: product, isLoading: productLoading, error: productError } = useProduct(slug || '');
+  const { data: product, isLoading: productLoading, error: productError } = useProduct(identifier || '');
 
   const [buyerInfo, setBuyerInfo] = useState<BuyerInfo>({
     name: '',
@@ -52,7 +52,7 @@ export default function CheckoutPage() {
   }
 
   const handleBack = () => {
-    navigate(`/p/${product.slug}`);
+    navigate(`/p/${product.id}`);
   };
 
   const handleOrderSuccess = (orderId: string) => {

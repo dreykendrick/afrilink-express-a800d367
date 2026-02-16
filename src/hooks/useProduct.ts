@@ -2,43 +2,61 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Product } from '@/lib/types';
 
-export function useProduct(slug: string) {
+// UUID v4 pattern
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Fetch a product by identifier (ID or slug).
+ * Tries ID lookup first if the identifier looks like a UUID,
+ * otherwise falls back to slug matching (exact, then base-slug).
+ */
+export function useProduct(identifier: string) {
   return useQuery({
-    queryKey: ['product', slug],
+    queryKey: ['product', identifier],
     queryFn: async () => {
-      // Try exact match first
+      // If it looks like a UUID, try ID lookup first
+      if (UUID_RE.test(identifier)) {
+        const { data, error } = await supabase
+          .from('products')
+          .select('*')
+          .eq('id', identifier)
+          .maybeSingle();
+
+        if (error) {
+          console.error('Error fetching product by id:', error);
+          throw new Error('Product not found');
+        }
+        if (data) return data as unknown as Product;
+      }
+
+      // Try exact slug match
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .eq('slug', slug)
+        .eq('slug', identifier)
         .maybeSingle();
 
       if (error) {
-        console.error('Error fetching product:', error);
+        console.error('Error fetching product by slug:', error);
         throw new Error('Product not found');
       }
+      if (data) return data as unknown as Product;
 
-      if (data) {
-        return data as unknown as Product;
-      }
-
-      // Fallback: try matching the base slug (before any suffix like "-bd6d5c")
-      const baseSlug = slug.replace(/-[a-z0-9]{4,8}$/i, '');
-      if (baseSlug && baseSlug !== slug) {
+      // Fallback: strip trailing hex suffix and retry slug
+      const baseSlug = identifier.replace(/-[a-z0-9]{4,8}$/i, '');
+      if (baseSlug && baseSlug !== identifier) {
         const { data: fallback } = await supabase
           .from('products')
           .select('*')
           .eq('slug', baseSlug)
           .maybeSingle();
 
-        if (fallback) {
-          return fallback as unknown as Product;
-        }
+        if (fallback) return fallback as unknown as Product;
       }
 
       throw new Error('Product not found');
     },
-    enabled: !!slug,
+    enabled: !!identifier,
     retry: 1,
   });
 }
