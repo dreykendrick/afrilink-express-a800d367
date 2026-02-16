@@ -12,10 +12,10 @@ import { formatPrice } from '@/lib/format';
 import { getProductUrl, getAppUrl } from '@/lib/url';
 
 export default function ProductPage() {
-  const { slug } = useParams<{ slug: string }>();
+  const { slug: identifier } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { data: product, isLoading, error, refetch } = useProduct(slug || '');
+  const { data: product, isLoading, error, refetch } = useProduct(identifier || '');
   
   // Track affiliate click (idempotent)
   useAffiliateTracking(product?.id);
@@ -38,15 +38,15 @@ export default function ProductPage() {
     // Forward ref param to checkout for affiliate attribution
     const ref = searchParams.get('ref');
     const checkoutUrl = ref 
-      ? `/checkout/${product.slug}?ref=${encodeURIComponent(ref)}`
-      : `/checkout/${product.slug}`;
+      ? `/checkout/${product.id}?ref=${encodeURIComponent(ref)}`
+      : `/checkout/${product.id}`;
     navigate(checkoutUrl);
   };
 
   // SEO meta tags for WhatsApp share preview - use canonical production URL
   const metaImage = product.image_urls?.[0] || product.image_url || '/placeholder.svg';
   const metaDescription = product.description?.slice(0, 160) || product.title;
-  const canonicalUrl = getProductUrl(product.slug);
+  const canonicalUrl = getProductUrl(product.id);
   const appUrl = getAppUrl();
   
   // Make image URL absolute for social sharing

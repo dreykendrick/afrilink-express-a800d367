@@ -25,8 +25,8 @@ export function getAppUrl(): string {
 }
 
 // Build a product URL with optional affiliate ref
-export function getProductUrl(slug: string, ref?: string | null): string {
-  const baseUrl = `${getAppUrl()}/p/${slug}`;
+export function getProductUrl(productId: string, ref?: string | null): string {
+  const baseUrl = `${getAppUrl()}/p/${productId}`;
   if (ref) {
     return `${baseUrl}?ref=${encodeURIComponent(ref)}`;
   }
@@ -34,8 +34,8 @@ export function getProductUrl(slug: string, ref?: string | null): string {
 }
 
 // Build a checkout URL with optional affiliate ref
-export function getCheckoutUrl(slug: string, ref?: string | null): string {
-  const baseUrl = `${getAppUrl()}/checkout/${slug}`;
+export function getCheckoutUrl(productId: string, ref?: string | null): string {
+  const baseUrl = `${getAppUrl()}/checkout/${productId}`;
   if (ref) {
     return `${baseUrl}?ref=${encodeURIComponent(ref)}`;
   }
