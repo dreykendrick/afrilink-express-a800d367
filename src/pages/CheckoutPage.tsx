@@ -52,7 +52,7 @@ export default function CheckoutPage() {
   }
 
   const handleBack = () => {
-    navigate(`/p/${product.id}`);
+    navigate(`/p/${product.slug}`);
   };
 
   const handleOrderSuccess = (orderId: string) => {
