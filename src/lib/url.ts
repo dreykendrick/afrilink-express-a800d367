@@ -24,9 +24,9 @@ export function getAppUrl(): string {
   return 'https://shop.afrilink.info';
 }
 
-// Build a product URL with optional affiliate ref
-export function getProductUrl(productId: string, ref?: string | null): string {
-  const baseUrl = `${getAppUrl()}/p/${productId}`;
+// Build a product URL with optional affiliate ref (uses slug)
+export function getProductUrl(slug: string, ref?: string | null): string {
+  const baseUrl = `${getAppUrl()}/p/${slug}`;
   if (ref) {
     return `${baseUrl}?ref=${encodeURIComponent(ref)}`;
   }

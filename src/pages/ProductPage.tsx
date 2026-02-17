@@ -46,7 +46,7 @@ export default function ProductPage() {
   // SEO meta tags for WhatsApp share preview - use canonical production URL
   const metaImage = product.image_urls?.[0] || product.image_url || '/placeholder.svg';
   const metaDescription = product.description?.slice(0, 160) || product.title;
-  const canonicalUrl = getProductUrl(product.id);
+  const canonicalUrl = getProductUrl(product.slug);
   const appUrl = getAppUrl();
   
   // Make image URL absolute for social sharing
