@@ -10,7 +10,8 @@ interface ProductDetailsProps {
 export function ProductDetails({ product }: ProductDetailsProps) {
   const [showFullDescription, setShowFullDescription] = useState(false);
 
-  const hasLongDescription = product.description && product.description.length > 150;
+  const description = product.description || product.short_description;
+  const hasLongDescription = description && description.length > 150;
 
   return (
     <div className="p-4 space-y-4">
@@ -19,13 +20,13 @@ export function ProductDetails({ product }: ProductDetailsProps) {
         <p className="text-2xl font-bold text-primary">
           {formatPrice(product.price)}
         </p>
-        <h1 className="text-xl font-semibold leading-tight">{product.title}</h1>
+        <h1 className="text-xl font-semibold leading-tight">{product.name}</h1>
       </div>
 
-      {/* Category */}
-      {product.category && (
+      {/* Short Description */}
+      {product.short_description && !product.description && (
         <p className="text-muted-foreground leading-relaxed">
-          {product.category}
+          {product.short_description}
         </p>
       )}
 

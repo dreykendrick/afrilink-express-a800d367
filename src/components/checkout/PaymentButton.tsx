@@ -27,10 +27,9 @@ export function PaymentButton({
 
   const validateForm = (): string | null => {
     if (!buyerInfo.name.trim()) return 'Please enter your full name';
-    if (!buyerInfo.email.trim()) return 'Please enter your email';
     if (!buyerInfo.phone.trim()) return 'Please enter your phone number';
     if (!isValidTanzaniaPhone(buyerInfo.phone)) return 'Please enter a valid Tanzania phone number';
-    if (!buyerInfo.city.trim()) return 'Please enter your city';
+    if (!buyerInfo.city.trim()) return 'Please select your city';
     if (!buyerInfo.area.trim()) return 'Please enter your area or street';
     return null;
   };
@@ -49,9 +48,9 @@ export function PaymentButton({
     setIsLoading(true);
 
     try {
-      // Get affiliate link from session
+      // Get affiliate from session
       const affiliateCode = sessionStorage.getItem('afrilink_affiliate');
-      let affiliateLinkId: string | null = null;
+      let affiliateId: string | null = null;
 
       if (affiliateCode) {
         const { data: affiliate } = await supabase
@@ -60,31 +59,30 @@ export function PaymentButton({
           .eq('code', affiliateCode)
           .eq('is_active', true)
           .maybeSingle();
-        affiliateLinkId = affiliate?.id || null;
+        affiliateId = affiliate?.id || null;
       }
 
-      // Build delivery address
-      const deliveryAddress = [
-        buyerInfo.area.trim(),
-        buyerInfo.landmark.trim(),
-      ].filter(Boolean).join(', ');
+      // Generate order number
+      const orderNumber = `AF-${Date.now().toString(36).toUpperCase()}`;
 
-      // Create order
-      const { data: order, error: orderError } = await (supabase as any)
+      // Create order matching actual DB schema
+      const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
-          customer_name: buyerInfo.name.trim(),
-          customer_email: buyerInfo.email.trim(),
-          customer_phone: normalizePhone(buyerInfo.phone),
-          delivery_address: deliveryAddress || null,
-          delivery_city: buyerInfo.city.trim(),
+          product_id: product.id,
+          order_number: orderNumber,
+          buyer_name: buyerInfo.name.trim(),
+          buyer_phone: normalizePhone(buyerInfo.phone),
+          buyer_city_id: buyerInfo.city.trim(),
+          buyer_area: buyerInfo.area.trim(),
+          buyer_landmark: buyerInfo.landmark.trim() || null,
+          buyer_notes: buyerInfo.notes.trim() || null,
+          item_price: product.price,
           delivery_fee: deliveryFee,
           total_amount: totalAmount,
-          status: 'pending',
-          payment_status: 'pending_payment',
-          affiliate_link_id: affiliateLinkId,
-          buyer_notes: buyerInfo.notes.trim() || null,
-          checkout_session_id: idempotencyKeyRef.current,
+          affiliate_id: affiliateId,
+          payment_status: 'pending',
+          order_status: 'pending_payment',
         })
         .select()
         .single();
@@ -94,28 +92,12 @@ export function PaymentButton({
         throw new Error('Failed to create order');
       }
 
-      // Create order item
-      const { error: itemError } = await (supabase as any)
-        .from('order_items')
-        .insert({
-          order_id: order.id,
-          product_id: product.id,
-          quantity: 1,
-          price: product.price,
-          commission_amount: product.commission || 0,
-        });
-
-      if (itemError) {
-        console.error('Order item creation error:', itemError);
-        // Don't throw - order is created, item is secondary
-      }
-
       // Simulate payment confirmation (in production: mobile money API)
-      const { error: updateError } = await (supabase as any)
+      const { error: updateError } = await supabase
         .from('orders')
         .update({
           payment_status: 'paid',
-          status: 'paid',
+          order_status: 'paid',
         })
         .eq('id', order.id);
 

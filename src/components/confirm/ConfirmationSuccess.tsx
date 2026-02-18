@@ -7,8 +7,7 @@ interface ConfirmationSuccessProps {
 }
 
 export function ConfirmationSuccess({ order }: ConfirmationSuccessProps) {
-  const firstItem = order.order_items?.[0];
-  const product = firstItem?.product;
+  const product = order.product;
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
@@ -23,15 +22,15 @@ export function ConfirmationSuccess({ order }: ConfirmationSuccessProps) {
 
       <div className="card-premium p-4 mt-8 w-full max-w-sm text-left">
         <div className="flex items-center gap-3 mb-4">
-          {(product?.image_urls?.[0] || product?.image_url) && (
+          {product?.images?.[0] && (
             <img
-              src={product.image_urls?.[0] || product.image_url!}
-              alt={product.title}
+              src={product.images[0]}
+              alt={product.name}
               className="w-14 h-14 rounded-lg object-cover bg-secondary"
             />
           )}
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm truncate">{product?.title}</p>
+            <p className="font-medium text-sm truncate">{product?.name}</p>
             <p className="text-primary font-semibold text-sm">
               {formatPrice(order.total_amount)}
             </p>
@@ -39,7 +38,7 @@ export function ConfirmationSuccess({ order }: ConfirmationSuccessProps) {
         </div>
 
         <div className="text-xs text-muted-foreground space-y-1 border-t border-border pt-3">
-          <p>Order #{order.id.slice(0, 8).toUpperCase()}</p>
+          <p>Order #{order.order_number}</p>
           {order.updated_at && (
             <p>Confirmed on {formatDate(order.updated_at)}</p>
           )}

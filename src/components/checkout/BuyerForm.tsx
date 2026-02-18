@@ -1,7 +1,10 @@
-import { User, Phone, MapPin, MessageSquare, Mail } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { User, Phone, MapPin, MessageSquare } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { supabase } from '@/integrations/supabase/client';
 import type { BuyerInfo } from '@/lib/types';
 
 interface BuyerFormProps {
@@ -10,6 +13,14 @@ interface BuyerFormProps {
 }
 
 export function BuyerForm({ buyerInfo, onChange }: BuyerFormProps) {
+  const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    supabase.from('cities').select('id, name').order('name').then(({ data }) => {
+      if (data) setCities(data);
+    });
+  }, []);
+
   const updateField = (field: keyof BuyerInfo, value: string) => {
     onChange({ ...buyerInfo, [field]: value });
   };
@@ -29,22 +40,6 @@ export function BuyerForm({ buyerInfo, onChange }: BuyerFormProps) {
           placeholder="Enter your full name"
           value={buyerInfo.name}
           onChange={(e) => updateField('name', e.target.value)}
-          className="h-12"
-        />
-      </div>
-
-      {/* Email */}
-      <div className="space-y-2">
-        <Label htmlFor="email" className="flex items-center gap-2 text-muted-foreground">
-          <Mail className="w-4 h-4" />
-          Email
-        </Label>
-        <Input
-          id="email"
-          type="email"
-          placeholder="your@email.com"
-          value={buyerInfo.email}
-          onChange={(e) => updateField('email', e.target.value)}
           className="h-12"
         />
       </div>
@@ -70,17 +65,20 @@ export function BuyerForm({ buyerInfo, onChange }: BuyerFormProps) {
 
       {/* City */}
       <div className="space-y-2">
-        <Label htmlFor="city" className="flex items-center gap-2 text-muted-foreground">
+        <Label className="flex items-center gap-2 text-muted-foreground">
           <MapPin className="w-4 h-4" />
           City
         </Label>
-        <Input
-          id="city"
-          placeholder="e.g. Dar es Salaam"
-          value={buyerInfo.city}
-          onChange={(e) => updateField('city', e.target.value)}
-          className="h-12"
-        />
+        <Select value={buyerInfo.city} onValueChange={(v) => updateField('city', v)}>
+          <SelectTrigger className="h-12">
+            <SelectValue placeholder="Select your city" />
+          </SelectTrigger>
+          <SelectContent>
+            {cities.map((c) => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Area/Street */}
