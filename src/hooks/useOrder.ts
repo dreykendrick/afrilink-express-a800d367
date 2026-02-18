@@ -6,24 +6,16 @@ export function useOrder(orderId: string) {
   return useQuery({
     queryKey: ['order', orderId],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('orders')
         .select(`
           *,
-          order_items(
+          product:products(
             id,
-            product_id,
-            quantity,
+            name,
+            slug,
             price,
-            commission_amount,
-            product:products(
-              id,
-              title,
-              slug,
-              price,
-              image_url,
-              image_urls
-            )
+            images
           )
         `)
         .eq('id', orderId)
@@ -49,24 +41,16 @@ export function useOrderByToken(orderId: string, token: string) {
   return useQuery({
     queryKey: ['order', orderId, 'token', token],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('orders')
         .select(`
           *,
-          order_items(
+          product:products(
             id,
-            product_id,
-            quantity,
+            name,
+            slug,
             price,
-            commission_amount,
-            product:products(
-              id,
-              title,
-              slug,
-              price,
-              image_url,
-              image_urls
-            )
+            images
           )
         `)
         .eq('id', orderId)

@@ -6,8 +6,7 @@ interface ReceiptDetailsProps {
 }
 
 export function ReceiptDetails({ order }: ReceiptDetailsProps) {
-  const firstItem = order.order_items?.[0];
-  const product = firstItem?.product;
+  const product = order.product;
 
   return (
     <div className="space-y-4">
@@ -15,16 +14,16 @@ export function ReceiptDetails({ order }: ReceiptDetailsProps) {
       <div className="card-premium p-4">
         <h3 className="font-semibold mb-3">Product</h3>
         <div className="flex items-center gap-3">
-          {(product?.image_urls?.[0] || product?.image_url) && (
+          {product?.images?.[0] && (
             <img
-              src={product.image_urls?.[0] || product.image_url!}
-              alt={product.title}
+              src={product.images[0]}
+              alt={product.name}
               className="w-16 h-16 rounded-lg object-cover bg-secondary"
             />
           )}
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm truncate">{product?.title}</p>
-            <p className="text-primary font-semibold">{formatPrice(firstItem?.price || 0)}</p>
+            <p className="font-medium text-sm truncate">{product?.name}</p>
+            <p className="text-primary font-semibold">{formatPrice(order.item_price)}</p>
           </div>
         </div>
       </div>
@@ -33,10 +32,10 @@ export function ReceiptDetails({ order }: ReceiptDetailsProps) {
       <div className="card-premium p-4">
         <h3 className="font-semibold mb-3">Delivery Address</h3>
         <div className="text-sm space-y-1 text-muted-foreground">
-          <p className="text-foreground font-medium">{order.customer_name}</p>
-          {order.customer_phone && <p>{formatPhoneDisplay(order.customer_phone)}</p>}
-          {order.delivery_address && <p>{order.delivery_address}</p>}
-          {order.delivery_city && <p>{order.delivery_city}</p>}
+          <p className="text-foreground font-medium">{order.buyer_name}</p>
+          <p>{formatPhoneDisplay(order.buyer_phone)}</p>
+          <p>{order.buyer_area}</p>
+          {order.buyer_landmark && <p>{order.buyer_landmark}</p>}
         </div>
       </div>
 
@@ -46,7 +45,7 @@ export function ReceiptDetails({ order }: ReceiptDetailsProps) {
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Item price</span>
-            <span>{formatPrice(firstItem?.price || 0)}</span>
+            <span>{formatPrice(order.item_price)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Delivery fee</span>

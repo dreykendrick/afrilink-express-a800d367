@@ -32,7 +32,7 @@ export default function ConfirmDeliveryPage() {
   }
 
   // Already confirmed
-  if (order.status === 'confirmed') {
+  if (order.order_status === 'confirmed') {
     return <ConfirmationSuccess order={order} />;
   }
 
@@ -40,8 +40,7 @@ export default function ConfirmDeliveryPage() {
     return <ConfirmationSuccess order={order} />;
   }
 
-  const firstItem = order.order_items?.[0];
-  const product = firstItem?.product;
+  const product = order.product;
 
   return (
     <div className="min-h-screen p-4 pb-8">
@@ -59,16 +58,16 @@ export default function ConfirmDeliveryPage() {
 
       <div className="card-premium p-4 mb-4">
         <div className="flex items-center gap-3">
-          {(product?.image_urls?.[0] || product?.image_url) && (
+          {product?.images?.[0] && (
             <img
-              src={product.image_urls?.[0] || product.image_url!}
-              alt={product.title}
+              src={product.images[0]}
+              alt={product.name}
               className="w-16 h-16 rounded-lg object-cover bg-secondary"
             />
           )}
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm truncate">{product?.title}</p>
-            <p className="text-xs text-muted-foreground">Order #{order.id.slice(0, 8).toUpperCase()}</p>
+            <p className="font-medium text-sm truncate">{product?.name}</p>
+            <p className="text-xs text-muted-foreground">Order #{order.order_number}</p>
           </div>
         </div>
       </div>

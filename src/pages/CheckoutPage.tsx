@@ -25,7 +25,6 @@ export default function CheckoutPage() {
 
   const [buyerInfo, setBuyerInfo] = useState<BuyerInfo>({
     name: '',
-    email: '',
     phone: '',
     city: '',
     area: '',

@@ -35,21 +35,19 @@ export default function ProductPage() {
   }
 
   const handleBuyNow = () => {
-    // Forward ref param to checkout for affiliate attribution
     const ref = searchParams.get('ref');
     const checkoutUrl = ref 
-      ? `/checkout/${product.id}?ref=${encodeURIComponent(ref)}`
-      : `/checkout/${product.id}`;
+      ? `/checkout/${product.slug}?ref=${encodeURIComponent(ref)}`
+      : `/checkout/${product.slug}`;
     navigate(checkoutUrl);
   };
 
-  // SEO meta tags for WhatsApp share preview - use canonical production URL
-  const metaImage = product.image_urls?.[0] || product.image_url || '/placeholder.svg';
-  const metaDescription = product.description?.slice(0, 160) || product.title;
+  // SEO meta tags
+  const metaImage = product.images?.[0] || '/placeholder.svg';
+  const metaDescription = product.short_description || product.description?.slice(0, 160) || product.name;
   const canonicalUrl = getProductUrl(product.slug);
   const appUrl = getAppUrl();
   
-  // Make image URL absolute for social sharing
   const absoluteImageUrl = metaImage.startsWith('http') 
     ? metaImage 
     : `${appUrl}${metaImage.startsWith('/') ? metaImage : '/' + metaImage}`;
@@ -57,12 +55,11 @@ export default function ProductPage() {
   return (
     <>
       <Helmet>
-        <title>{product.title} | AfriLink</title>
+        <title>{product.name} | AfriLink</title>
         <meta name="description" content={metaDescription} />
         <link rel="canonical" href={canonicalUrl} />
         
-        {/* Open Graph for WhatsApp/Social - using canonical production URL */}
-        <meta property="og:title" content={product.title} />
+        <meta property="og:title" content={product.name} />
         <meta property="og:description" content={metaDescription} />
         <meta property="og:image" content={absoluteImageUrl} />
         <meta property="og:url" content={canonicalUrl} />
@@ -71,23 +68,19 @@ export default function ProductPage() {
         <meta property="product:price:amount" content={String(product.price)} />
         <meta property="product:price:currency" content="TZS" />
         
-        {/* Twitter Card */}
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={product.title} />
+        <meta name="twitter:title" content={product.name} />
         <meta name="twitter:description" content={metaDescription} />
         <meta name="twitter:image" content={absoluteImageUrl} />
       </Helmet>
 
       <div className="min-h-screen flex flex-col">
-        {/* Product Image Carousel */}
-        <ImageCarousel images={product.image_urls || []} alt={product.title} />
+        <ImageCarousel images={product.images || []} alt={product.name} />
 
-        {/* Product Details */}
         <div className="flex-1">
           <ProductDetails product={product} />
         </div>
 
-        {/* Fixed Bottom CTA */}
         <div className="sticky bottom-0 p-4 bg-background/95 backdrop-blur-sm border-t border-border safe-bottom">
           <Button
             onClick={handleBuyNow}

@@ -23,15 +23,15 @@ export function CheckoutHeader({ product, onBack }: CheckoutHeaderProps) {
 
       {/* Product Summary */}
       <div className="flex items-center gap-3 px-4 pb-4">
-        {(product.image_urls?.[0] || product.image_url) && (
+        {product.images?.[0] && (
           <img
-            src={product.image_urls?.[0] || product.image_url!}
-            alt={product.title}
+            src={product.images[0]}
+            alt={product.name}
             className="w-16 h-16 rounded-lg object-cover bg-secondary"
           />
         )}
         <div className="flex-1 min-w-0">
-          <h1 className="font-medium text-sm truncate">{product.title}</h1>
+          <h1 className="font-medium text-sm truncate">{product.name}</h1>
           <p className="text-primary font-semibold">{formatPrice(product.price)}</p>
         </div>
       </div>

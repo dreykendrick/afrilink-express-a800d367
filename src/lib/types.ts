@@ -4,20 +4,18 @@ export interface Product {
   id: string;
   vendor_id: string;
   slug: string;
-  title: string;
+  name: string;
   price: number;
   description: string | null;
-  category: string | null;
-  image_url: string | null;
-  image_urls: string[];
-  status: string;
-  is_available: boolean;
-  commission: number | null;
+  short_description: string | null;
+  images: string[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface BuyerInfo {
   name: string;
-  email: string;
   phone: string;
   city: string;
   area: string;
@@ -29,36 +27,27 @@ export type PaymentStatus = 'pending_payment' | 'paid' | 'confirmed' | 'failed' 
 
 export interface Order {
   id: string;
-  customer_name: string;
-  customer_email: string;
-  customer_phone: string | null;
-  delivery_address: string | null;
-  delivery_city: string | null;
-  delivery_country: string | null;
-  delivery_type: string | null;
+  order_number: string;
+  product_id: string;
+  affiliate_id: string | null;
+  buyer_name: string;
+  buyer_phone: string;
+  buyer_city_id: string;
+  buyer_area: string;
+  buyer_landmark: string | null;
+  buyer_notes: string | null;
+  item_price: number;
   delivery_fee: number;
   total_amount: number;
-  status: string;
-  affiliate_link_id: string | null;
-  confirmation_token: string | null;
+  order_status: string;
   payment_status: string;
+  notification_status: string | null;
+  confirmation_token: string;
   vendor_notified_at: string | null;
-  buyer_notes: string | null;
-  payment_reference: string | null;
-  checkout_session_id: string | null;
+  confirmed_at: string | null;
   created_at: string;
   updated_at: string;
   // Joined
-  order_items?: OrderItem[];
-}
-
-export interface OrderItem {
-  id: string;
-  order_id: string;
-  product_id: string;
-  quantity: number;
-  price: number;
-  commission_amount: number | null;
   product?: Product;
 }
 

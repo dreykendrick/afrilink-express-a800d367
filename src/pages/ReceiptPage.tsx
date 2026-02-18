@@ -25,8 +25,6 @@ export default function ReceiptPage() {
     );
   }
 
-  // Show receipt for all orders (payment confirmation happens via backend/webhook)
-
   return (
     <div className="min-h-screen p-4 pb-8">
       <div className="text-center py-6 space-y-3">
@@ -36,12 +34,12 @@ export default function ReceiptPage() {
         <div>
           <h1 className="text-xl font-semibold">Order Confirmed</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Order #{order.id.slice(0, 8).toUpperCase()}
+            Order #{order.order_number}
           </p>
         </div>
       </div>
 
-      <StatusTimeline status={order.status} />
+      <StatusTimeline status={order.order_status} />
       <ReceiptDetails order={order} />
 
       <div className="mt-6 text-center">
@@ -54,7 +52,7 @@ export default function ReceiptPage() {
         </Link>
       </div>
 
-      {order.status === 'delivered' && order.confirmation_token && (
+      {order.order_status === 'delivered' && order.confirmation_token && (
         <div className="mt-6">
           <Link to={`/confirm/${order.id}?token=${order.confirmation_token}`}>
             <Button className="w-full h-12" variant="outline">
