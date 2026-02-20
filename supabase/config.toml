@@ -1,1 +1,7 @@
 project_id = "ojcvtfwuscitrrhloqhu"
+
+[functions.notify-vendor]
+verify_jwt = false
+
+[functions.get-product]
+verify_jwt = false
