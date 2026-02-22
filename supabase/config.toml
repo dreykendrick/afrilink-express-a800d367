@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.get-product]
 verify_jwt = false
+
+[functions.checkout-api]
+verify_jwt = false
