@@ -2,10 +2,10 @@
  * API helpers – all checkout data fetching goes through the checkout-api edge function.
  */
 
-const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+const CHECKOUT_SUPABASE_URL = 'https://ckklirhhwndijsjpmnfe.supabase.co';
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-const BASE = `https://${PROJECT_ID}.supabase.co/functions/v1/checkout-api`;
+const BASE = `${CHECKOUT_SUPABASE_URL}/functions/v1/checkout-api`;
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
