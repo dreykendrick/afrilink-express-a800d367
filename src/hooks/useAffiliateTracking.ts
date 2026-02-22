@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchAffiliate, trackAffiliateClick } from '@/lib/api';
 import { getSessionId } from '@/lib/format';
 
 export function useAffiliateTracking(productId: string | undefined) {
@@ -13,31 +13,13 @@ export function useAffiliateTracking(productId: string | undefined) {
     const sessionId = getSessionId();
 
     try {
-      // Get affiliate by code
-      const { data: affiliate, error: affiliateError } = await supabase
-        .from('affiliates')
-        .select('id')
-        .eq('code', affiliateCode)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (affiliateError || !affiliate) {
+      const affiliate = await fetchAffiliate(affiliateCode);
+      if (!affiliate) {
         console.log('Affiliate not found or inactive:', affiliateCode);
         return;
       }
 
-      // Insert click (idempotent via unique constraint)
-      const { error: clickError } = await supabase
-        .from('affiliate_clicks')
-        .insert({
-          affiliate_id: affiliate.id,
-          product_id: productId,
-          session_id: sessionId,
-        });
-
-      if (clickError && !clickError.message.includes('duplicate')) {
-        console.error('Error tracking affiliate click:', clickError);
-      }
+      await trackAffiliateClick(affiliate.id, productId, sessionId);
     } catch (err) {
       console.error('Affiliate tracking error:', err);
     }

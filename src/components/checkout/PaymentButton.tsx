@@ -3,6 +3,7 @@ import { CreditCard, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAffiliate } from '@/lib/api';
 import { formatPrice, normalizePhone, isValidTanzaniaPhone, generateIdempotencyKey } from '@/lib/format';
 import type { Product, BuyerInfo } from '@/lib/types';
 
@@ -53,12 +54,7 @@ export function PaymentButton({
       let affiliateId: string | null = null;
 
       if (affiliateCode) {
-        const { data: affiliate } = await supabase
-          .from('affiliates')
-          .select('id')
-          .eq('code', affiliateCode)
-          .eq('is_active', true)
-          .maybeSingle();
+        const affiliate = await fetchAffiliate(affiliateCode);
         affiliateId = affiliate?.id || null;
       }
 
