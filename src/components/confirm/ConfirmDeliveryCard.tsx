@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { confirmDelivery } from '@/lib/api';
 import type { Order } from '@/lib/types';
 
 interface ConfirmDeliveryCardProps {
@@ -19,18 +19,7 @@ export function ConfirmDeliveryCard({ order, onConfirmed, onReportIssue }: Confi
     setIsLoading(true);
 
     try {
-      const { error } = await supabase
-        .from('orders')
-        .update({
-          order_status: 'confirmed',
-        })
-        .eq('id', order.id)
-        .eq('confirmation_token', order.confirmation_token);
-
-      if (error) {
-        console.error('Confirmation error:', error);
-        throw new Error('Failed to confirm delivery');
-      }
+      await confirmDelivery(order.id, order.confirmation_token);
 
       toast({
         title: 'Delivery confirmed!',

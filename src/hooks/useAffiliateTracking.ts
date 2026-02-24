@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchAffiliate, trackAffiliateClick } from '@/lib/api';
+import { trackAffiliateClick } from '@/lib/api';
 import { getSessionId } from '@/lib/format';
 
 export function useAffiliateTracking(productId: string | undefined) {
@@ -13,13 +13,7 @@ export function useAffiliateTracking(productId: string | undefined) {
     const sessionId = getSessionId();
 
     try {
-      const affiliate = await fetchAffiliate(affiliateCode);
-      if (!affiliate) {
-        console.log('Affiliate not found or inactive:', affiliateCode);
-        return;
-      }
-
-      await trackAffiliateClick(affiliate.id, productId, sessionId);
+      await trackAffiliateClick(affiliateCode, productId, sessionId);
     } catch (err) {
       console.error('Affiliate tracking error:', err);
     }
