@@ -33,10 +33,27 @@ export function fetchProduct(idOrSlug: string): Promise<Product> {
   return apiFetch<Product>(`/products/${encodeURIComponent(idOrSlug)}`);
 }
 
-// ---- Delivery Fees ----
+// ---- Delivery Fees / Cities ----
 
 export function fetchDeliveryFees(): Promise<any> {
   return apiFetch<any>('/delivery-fees');
+}
+
+export async function fetchCities(): Promise<Array<{ id: string; name: string }>> {
+  const payload = await fetchDeliveryFees();
+
+  const directCities = Array.isArray(payload?.cities) ? payload.cities : [];
+  const zoneCities = Array.isArray(payload?.zones) ? payload.zones : [];
+
+  const normalized = [
+    ...directCities.map((c: any) => ({ id: c.id ?? c.city_id ?? c.cityId, name: c.name ?? c.city_name ?? c.city })),
+    ...zoneCities.map((z: any) => ({ id: z.city_id ?? z.cityId ?? z.id, name: z.city_name ?? z.city ?? z.name })),
+  ].filter((c) => c.id && c.name) as Array<{ id: string; name: string }>;
+
+  const unique = new Map<string, { id: string; name: string }>();
+  normalized.forEach((city) => unique.set(city.id, city));
+
+  return [...unique.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // ---- Affiliate ----
