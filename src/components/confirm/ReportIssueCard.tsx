@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { reportOrderIssue } from '@/lib/api';
 import type { Order } from '@/lib/types';
 
 interface ReportIssueCardProps {
@@ -41,16 +41,8 @@ export function ReportIssueCard({ order, onBack, onSubmitted }: ReportIssueCardP
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.from('order_issues').insert({
-        order_id: order.id,
-        reason: ISSUE_REASONS.find((r) => r.value === reason)?.label || reason,
-        notes: notes.trim() || null,
-      });
-
-      if (error) {
-        console.error('Issue report error:', error);
-        throw new Error('Failed to report issue');
-      }
+      const reasonLabel = ISSUE_REASONS.find((r) => r.value === reason)?.label || reason;
+      await reportOrderIssue(order.id, reasonLabel, notes.trim() || null);
 
       toast({
         title: 'Issue reported',
