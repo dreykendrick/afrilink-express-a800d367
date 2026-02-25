@@ -29,8 +29,28 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
 import type { Product, Order } from '@/lib/types';
 
-export function fetchProduct(idOrSlug: string): Promise<Product> {
-  return apiFetch<Product>(`/products/${encodeURIComponent(idOrSlug)}`);
+export async function fetchProduct(idOrSlug: string): Promise<Product> {
+  const raw = await apiFetch<any>(`/products/${encodeURIComponent(idOrSlug)}`);
+  // The main backend may wrap in { success, product } or return flat
+  const p = raw?.product ?? raw;
+  return normalizeProduct(p);
+}
+
+/** Map main-backend field names to our frontend Product type */
+function normalizeProduct(p: any): Product {
+  return {
+    id: p.id,
+    vendor_id: p.vendor_id ?? '',
+    slug: p.slug ?? '',
+    name: p.title ?? p.name ?? '',
+    price: p.price ?? 0,
+    description: p.description ?? null,
+    short_description: p.short_description ?? null,
+    images: p.image_urls ?? p.images ?? (p.image_url ? [p.image_url] : []),
+    is_active: true,
+    created_at: p.created_at ?? '',
+    updated_at: p.updated_at ?? '',
+  };
 }
 
 // ---- Delivery Fees / Cities ----
@@ -120,5 +140,14 @@ export async function confirmDelivery(orderId: string, token: string): Promise<O
   return apiFetch<Order>('/confirm-delivery', {
     method: 'POST',
     body: JSON.stringify({ order_id: orderId, token }),
+  });
+}
+
+// ---- Report Issue ----
+
+export async function reportOrderIssue(orderId: string, reason: string, notes?: string | null): Promise<void> {
+  await apiFetch('/report-issue', {
+    method: 'POST',
+    body: JSON.stringify({ order_id: orderId, reason, notes: notes || null }),
   });
 }
