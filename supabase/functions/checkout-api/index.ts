@@ -82,22 +82,37 @@ serve(async (req) => {
       return json(data);
     }
 
-    // ---- POST /affiliate-clicks ----
-    if (route === "affiliate-clicks" && req.method === "POST") {
+    // ---- POST /affiliate-clicks or /track-click ----
+    if ((route === "affiliate-clicks" || route === "track-click") && req.method === "POST") {
       const body = await req.json();
-      const { affiliate_id, product_id, session_id } = body;
+      let { affiliate_id, product_id, session_id, affiliate_code } = body;
 
-      if (!affiliate_id || !product_id || !session_id) {
+      if (!product_id || !session_id) {
         return json({ error: "Missing required fields" }, 400);
       }
 
       const admin = getAdminClient();
+
+      // If affiliate_code provided instead of affiliate_id, resolve it
+      if (!affiliate_id && affiliate_code) {
+        const { data: aff } = await admin
+          .from("affiliates")
+          .select("id")
+          .eq("code", affiliate_code)
+          .eq("is_active", true)
+          .maybeSingle();
+        if (aff) affiliate_id = aff.id;
+      }
+
+      if (!affiliate_id) {
+        return json({ error: "Invalid affiliate" }, 400);
+      }
+
       const { error } = await admin
         .from("affiliate_clicks")
         .insert({ affiliate_id, product_id, session_id });
 
       if (error) {
-        // Ignore duplicate clicks
         if (error.message?.includes("duplicate")) {
           return json({ ok: true, duplicate: true });
         }
