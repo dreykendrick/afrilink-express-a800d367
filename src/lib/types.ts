@@ -24,6 +24,31 @@ export interface BuyerInfo {
 }
 
 export type PaymentStatus = 'pending_payment' | 'paid' | 'confirmed' | 'failed' | 'refunded';
+export type CheckoutSource = 'affiliate_link' | 'marketplace';
+export type BuyerRole = 'guest' | 'customer' | 'vendor' | 'affiliate';
+
+export interface CheckoutPayload {
+  product_id: string;
+  quantity?: number;
+  customer_name: string;
+  customer_phone: string;
+  customer_city_id: string;
+  customer_area: string;
+  customer_landmark?: string;
+  customer_notes?: string;
+  source: CheckoutSource;
+  buyer_user_id?: string | null;
+  buyer_role: BuyerRole;
+  affiliate_ref?: string | null;
+  checkout_session_id: string;
+}
+
+export interface CheckoutResult {
+  order_id: string;
+  order_number: string;
+  payment_url?: string;
+  client_secret?: string;
+}
 
 export interface Order {
   id: string;
@@ -47,6 +72,10 @@ export interface Order {
   confirmed_at: string | null;
   created_at: string;
   updated_at: string;
+  source: CheckoutSource | null;
+  buyer_user_id: string | null;
+  buyer_role: BuyerRole | null;
+  affiliate_rate_at_purchase: number | null;
   // Joined
   product?: Product;
 }

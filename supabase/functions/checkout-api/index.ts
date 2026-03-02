@@ -122,6 +122,130 @@ serve(async (req) => {
       return json({ ok: true });
     }
 
+    // ---- POST /checkout/create ----
+    if (route === "checkout" && param === "create" && req.method === "POST") {
+      const body = await req.json();
+      const {
+        product_id, customer_name, customer_phone, customer_city_id,
+        customer_area, customer_landmark, customer_notes,
+        source, buyer_user_id, buyer_role, affiliate_ref, checkout_session_id,
+      } = body;
+
+      if (!product_id || !customer_name || !customer_phone || !customer_city_id || !customer_area || !source || !checkout_session_id) {
+        return json({ error: "Missing required fields" }, 400);
+      }
+
+      const admin = getAdminClient();
+
+      // Look up product for price
+      const { data: product, error: prodErr } = await admin
+        .from("products")
+        .select("id, price, vendor_id")
+        .eq("id", product_id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (prodErr || !product) {
+        return json({ error: "Product not found" }, 404);
+      }
+
+      // Resolve affiliate (only for affiliate_link source)
+      let affiliate_id: string | null = null;
+      let affiliate_rate_at_purchase: number | null = null;
+
+      if (source === "affiliate_link" && affiliate_ref) {
+        const { data: aff } = await admin
+          .from("affiliates")
+          .select("id, commission_rate")
+          .eq("code", affiliate_ref)
+          .eq("is_active", true)
+          .maybeSingle();
+        if (aff) {
+          affiliate_id = aff.id;
+          affiliate_rate_at_purchase = aff.commission_rate;
+        }
+      }
+
+      // For marketplace purchases by vendor/affiliate → commission goes to platform
+      // affiliate_id stays null; affiliate_rate_at_purchase captures the rate for platform
+      if (source === "marketplace" && (buyer_role === "vendor" || buyer_role === "affiliate")) {
+        // Look up the product's default commission rate (from vendor settings or product)
+        // For now, use a platform default of 5%
+        affiliate_rate_at_purchase = 0.05;
+        affiliate_id = null; // platform gets it, not an affiliate
+      }
+
+      const order_number = `ORD-${Date.now().toString(36).toUpperCase()}`;
+      const item_price = product.price;
+      const delivery_fee = 0; // TODO: calculate from city
+      const total_amount = item_price + delivery_fee;
+
+      const { data: order, error: orderErr } = await admin
+        .from("orders")
+        .insert({
+          order_number,
+          product_id,
+          affiliate_id,
+          buyer_name: customer_name,
+          buyer_phone: customer_phone,
+          buyer_city_id: customer_city_id,
+          buyer_area: customer_area,
+          buyer_landmark: customer_landmark || null,
+          buyer_notes: customer_notes || null,
+          item_price,
+          delivery_fee,
+          total_amount,
+          order_status: "pending_payment",
+          payment_status: "pending",
+          // New unified fields (will work after migration)
+          ...(source ? { source } : {}),
+          ...(buyer_user_id ? { buyer_user_id } : {}),
+          ...(buyer_role ? { buyer_role } : {}),
+          ...(affiliate_rate_at_purchase !== null ? { affiliate_rate_at_purchase } : {}),
+        })
+        .select("id, order_number")
+        .single();
+
+      if (orderErr) {
+        console.error("Order creation error:", orderErr);
+        return json({ error: "Failed to create order" }, 500);
+      }
+
+      return json({
+        order_id: order.id,
+        order_number: order.order_number,
+      }, 201);
+    }
+
+    // ---- POST /checkout/confirm ----
+    if (route === "checkout" && param === "confirm" && req.method === "POST") {
+      const body = await req.json();
+      const { order_id } = body;
+
+      if (!order_id) {
+        return json({ error: "Missing order_id" }, 400);
+      }
+
+      const admin = getAdminClient();
+
+      const { data: order, error } = await admin
+        .from("orders")
+        .update({
+          payment_status: "paid",
+          order_status: "paid",
+        })
+        .eq("id", order_id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Payment confirm error:", error);
+        return json({ error: "Failed to confirm payment" }, 500);
+      }
+
+      return json(order);
+    }
+
     return json({ error: "Not found" }, 404);
   } catch (err) {
     console.error("Unexpected error:", err);

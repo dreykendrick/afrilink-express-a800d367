@@ -27,11 +27,10 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
 // ---- Product ----
 
-import type { Product, Order } from '@/lib/types';
+import type { Product, Order, CheckoutPayload, CheckoutResult } from '@/lib/types';
 
 export async function fetchProduct(idOrSlug: string): Promise<Product> {
   const raw = await apiFetch<any>(`/products/${encodeURIComponent(idOrSlug)}`);
-  // The main backend may wrap in { success, product } or return flat
   const p = raw?.product ?? raw;
   return normalizeProduct(p);
 }
@@ -100,7 +99,23 @@ export async function trackAffiliateClick(
   }).catch((err) => console.error('Click tracking failed:', err));
 }
 
-// ---- Orders ----
+// ---- Unified Checkout ----
+
+export async function createCheckout(payload: CheckoutPayload): Promise<CheckoutResult> {
+  return apiFetch<CheckoutResult>('/checkout/create', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function confirmCheckoutPayment(orderId: string): Promise<Order> {
+  return apiFetch<Order>('/checkout/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ order_id: orderId }),
+  });
+}
+
+// ---- Legacy Order endpoints (kept for backward compat) ----
 
 export interface CreateOrderPayload {
   product_id: string;
