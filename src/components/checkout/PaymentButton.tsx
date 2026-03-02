@@ -2,9 +2,9 @@ import { useState, useRef } from 'react';
 import { CreditCard, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { createOrder, confirmPayment } from '@/lib/api';
+import { createCheckout, confirmCheckoutPayment } from '@/lib/api';
 import { formatPrice, normalizePhone, isValidTanzaniaPhone, generateIdempotencyKey } from '@/lib/format';
-import type { Product, BuyerInfo } from '@/lib/types';
+import type { Product, BuyerInfo, CheckoutSource, BuyerRole } from '@/lib/types';
 
 interface PaymentButtonProps {
   product: Product;
@@ -12,6 +12,12 @@ interface PaymentButtonProps {
   deliveryFee: number;
   totalAmount: number;
   onSuccess: (orderId: string) => void;
+  /** Checkout source — defaults to "affiliate_link" for this app */
+  source?: CheckoutSource;
+  /** Logged-in user ID if available */
+  buyerUserId?: string | null;
+  /** Logged-in user role if available */
+  buyerRole?: BuyerRole;
 }
 
 export function PaymentButton({
@@ -20,6 +26,9 @@ export function PaymentButton({
   deliveryFee,
   totalAmount,
   onSuccess,
+  source = 'affiliate_link',
+  buyerUserId = null,
+  buyerRole = 'guest',
 }: PaymentButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const idempotencyKeyRef = useRef<string | null>(null);
@@ -48,10 +57,11 @@ export function PaymentButton({
     setIsLoading(true);
 
     try {
-      const affiliateCode = sessionStorage.getItem('afrilink_affiliate') || undefined;
+      const affiliateRef = source === 'affiliate_link'
+        ? (sessionStorage.getItem('afrilink_affiliate') || null)
+        : null; // marketplace never sends affiliate ref
 
-      // Create order via remote API
-      const order = await createOrder({
+      const result = await createCheckout({
         product_id: product.id,
         customer_name: buyerInfo.name.trim(),
         customer_phone: normalizePhone(buyerInfo.phone),
@@ -59,15 +69,24 @@ export function PaymentButton({
         customer_area: buyerInfo.area.trim(),
         customer_landmark: buyerInfo.landmark.trim() || undefined,
         customer_notes: buyerInfo.notes.trim() || undefined,
-        affiliate_code: affiliateCode,
-        checkout_session_id: idempotencyKeyRef.current,
+        source,
+        buyer_user_id: buyerUserId,
+        buyer_role: buyerRole,
+        affiliate_ref: affiliateRef,
+        checkout_session_id: idempotencyKeyRef.current!,
       });
 
-      // Confirm payment via remote API
-      await confirmPayment(order.id);
+      // If backend returns a payment URL, redirect to it
+      if (result.payment_url) {
+        window.location.href = result.payment_url;
+        return;
+      }
+
+      // Otherwise confirm payment directly (COD / instant)
+      await confirmCheckoutPayment(result.order_id);
 
       toast({ title: 'Payment successful!', description: 'Your order has been placed.' });
-      onSuccess(order.id);
+      onSuccess(result.order_id);
     } catch (err) {
       console.error('Payment error:', err);
       toast({ variant: 'destructive', title: 'Payment failed', description: 'Something went wrong. Please try again.' });
