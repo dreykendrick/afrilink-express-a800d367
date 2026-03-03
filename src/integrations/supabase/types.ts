@@ -182,6 +182,7 @@ export type Database = {
           notes: string | null
           order_id: string
           paid_at: string | null
+          payout_id: string | null
           recipient_id: string | null
           recipient_type: string | null
           status: string
@@ -196,6 +197,7 @@ export type Database = {
           notes?: string | null
           order_id: string
           paid_at?: string | null
+          payout_id?: string | null
           recipient_id?: string | null
           recipient_type?: string | null
           status?: string
@@ -210,6 +212,7 @@ export type Database = {
           notes?: string | null
           order_id?: string
           paid_at?: string | null
+          payout_id?: string | null
           recipient_id?: string | null
           recipient_type?: string | null
           status?: string
@@ -221,6 +224,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_ledger_payout_id_fkey"
+            columns: ["payout_id"]
+            isOneToOne: false
+            referencedRelation: "payouts"
             referencedColumns: ["id"]
           },
         ]
@@ -327,6 +337,128 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payout_accounts: {
+        Row: {
+          account_name: string | null
+          account_number: string
+          account_type: string
+          created_at: string
+          id: string
+          is_default: boolean
+          owner_id: string
+          owner_type: string
+          provider: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_name?: string | null
+          account_number: string
+          account_type?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          owner_id: string
+          owner_type: string
+          provider?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_name?: string | null
+          account_number?: string
+          account_type?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          owner_id?: string
+          owner_type?: string
+          provider?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      payout_settings: {
+        Row: {
+          enabled: boolean
+          frequency: string
+          hold_days: number
+          id: string
+          min_threshold: number
+          run_hour: number
+          updated_at: string
+        }
+        Insert: {
+          enabled?: boolean
+          frequency?: string
+          hold_days?: number
+          id?: string
+          min_threshold?: number
+          run_hour?: number
+          updated_at?: string
+        }
+        Update: {
+          enabled?: boolean
+          frequency?: string
+          hold_days?: number
+          id?: string
+          min_threshold?: number
+          run_hour?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      payouts: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          id: string
+          idempotency_key: string | null
+          notes: string | null
+          payout_account_id: string | null
+          provider_reference: string | null
+          recipient_id: string
+          recipient_type: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          idempotency_key?: string | null
+          notes?: string | null
+          payout_account_id?: string | null
+          provider_reference?: string | null
+          recipient_id: string
+          recipient_type: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          idempotency_key?: string | null
+          notes?: string | null
+          payout_account_id?: string | null
+          provider_reference?: string | null
+          recipient_id?: string
+          recipient_type?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payouts_payout_account_id_fkey"
+            columns: ["payout_account_id"]
+            isOneToOne: false
+            referencedRelation: "payout_accounts"
             referencedColumns: ["id"]
           },
         ]
