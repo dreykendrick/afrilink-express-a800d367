@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.checkout-api]
 verify_jwt = false
+
+[functions.meetpay-webhook]
+verify_jwt = false

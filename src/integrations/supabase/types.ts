@@ -172,15 +172,71 @@ export type Database = {
           },
         ]
       }
+      order_ledger: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          entry_type: string
+          id: string
+          notes: string | null
+          order_id: string
+          paid_at: string | null
+          recipient_id: string | null
+          recipient_type: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          entry_type: string
+          id?: string
+          notes?: string | null
+          order_id: string
+          paid_at?: string | null
+          recipient_id?: string | null
+          recipient_type?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          entry_type?: string
+          id?: string
+          notes?: string | null
+          order_id?: string
+          paid_at?: string | null
+          recipient_id?: string | null
+          recipient_type?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_ledger_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           affiliate_id: string | null
+          affiliate_rate_at_purchase: number | null
           buyer_area: string
           buyer_city_id: string
           buyer_landmark: string | null
           buyer_name: string
           buyer_notes: string | null
           buyer_phone: string
+          buyer_role: string | null
+          buyer_user_id: string | null
           confirmation_token: string
           confirmed_at: string | null
           created_at: string
@@ -192,18 +248,22 @@ export type Database = {
           order_status: string
           payment_status: string
           product_id: string
+          source: string | null
           total_amount: number
           updated_at: string
           vendor_notified_at: string | null
         }
         Insert: {
           affiliate_id?: string | null
+          affiliate_rate_at_purchase?: number | null
           buyer_area: string
           buyer_city_id: string
           buyer_landmark?: string | null
           buyer_name: string
           buyer_notes?: string | null
           buyer_phone: string
+          buyer_role?: string | null
+          buyer_user_id?: string | null
           confirmation_token?: string
           confirmed_at?: string | null
           created_at?: string
@@ -215,18 +275,22 @@ export type Database = {
           order_status?: string
           payment_status?: string
           product_id: string
+          source?: string | null
           total_amount: number
           updated_at?: string
           vendor_notified_at?: string | null
         }
         Update: {
           affiliate_id?: string | null
+          affiliate_rate_at_purchase?: number | null
           buyer_area?: string
           buyer_city_id?: string
           buyer_landmark?: string | null
           buyer_name?: string
           buyer_notes?: string | null
           buyer_phone?: string
+          buyer_role?: string | null
+          buyer_user_id?: string | null
           confirmation_token?: string
           confirmed_at?: string | null
           created_at?: string
@@ -238,6 +302,7 @@ export type Database = {
           order_status?: string
           payment_status?: string
           product_id?: string
+          source?: string | null
           total_amount?: number
           updated_at?: string
           vendor_notified_at?: string | null
