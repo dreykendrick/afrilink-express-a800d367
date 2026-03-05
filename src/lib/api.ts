@@ -1,9 +1,13 @@
 /**
- * API helpers – all checkout data fetching goes through the main app's checkout-api edge function.
+ * API helpers – checkout data fetching goes through the main app's checkout-api edge function.
+ * Delivery fee data is fetched from this project's own checkout-api.
  */
 
 const API_BASE = 'https://ckklirhhwndijsjpmnfe.supabase.co/functions/v1';
 const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNra2xpcmhod25kaWpzanBtbmZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYzNDUzMDksImV4cCI6MjA2MTkyMTMwOX0.aNJkJVXNqzBicShLsFbIbYUS0bQHNBMxdbwcjJOavLM';
+
+const LOCAL_API_BASE = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
+const LOCAL_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}/checkout-api${path}`, {
@@ -55,8 +59,15 @@ function normalizeProduct(p: any): Product {
 
 // ---- Delivery Fees / Cities ----
 
-export function fetchDeliveryFees(): Promise<DeliveryFeeData> {
-  return apiFetch<DeliveryFeeData>('/delivery-fees');
+export async function fetchDeliveryFees(): Promise<DeliveryFeeData> {
+  const res = await fetch(`${LOCAL_API_BASE}/checkout-api/delivery-fees`, {
+    headers: {
+      'apikey': LOCAL_ANON_KEY,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!res.ok) throw new Error('Failed to load delivery fees');
+  return res.json();
 }
 
 export async function fetchCities(): Promise<Array<{ id: string; name: string }>> {

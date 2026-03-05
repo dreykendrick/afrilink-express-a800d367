@@ -7,14 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { formatPrice } from '@/lib/format';
 import type { BuyerInfo, DeliveryFeeData } from '@/lib/types';
 
-const TZ_CITIES = [
-  "Arusha","Babati","Bagamoyo","Bariadi","Bukoba","Bunda","Chalinze","Chake Chake",
-  "Dar es Salaam","Dodoma","Geita","Handeni","Ifakara","Iringa","Kahama","Kibaha",
-  "Kigoma","Kilosa","Korogwe","Lindi","Mafinga","Magu","Makambako","Makurdi",
-  "Manyoni","Masasi","Mbeya","Misungwi","Morogoro","Moshi","Mpanda","Mtwara",
-  "Musoma","Mwanza","Nansio","Newala","Ngara","Njombe","Nzega","Pangani",
-  "Same","Sengerema","Shinyanga","Singida","Sumbawanga","Tabora","Tanga","Tarime",
-  "Tunduma","Turiani","Usa River","Uvinza","Vwawa","Wete","Zanzibar City"
+// Fallback cities only used when backend returns nothing
+const TZ_CITIES_FALLBACK = [
+  "Arusha","Dar es Salaam","Dodoma","Mbeya","Mwanza","Tanga","Morogoro","Zanzibar City"
 ].sort();
 
 interface BuyerFormProps {
@@ -28,7 +23,7 @@ export function BuyerForm({ buyerInfo, onChange, feeData }: BuyerFormProps) {
     if (feeData?.cities && feeData.cities.length > 0) {
       return feeData.cities;
     }
-    return TZ_CITIES.map((name) => ({ id: name, name }));
+    return TZ_CITIES_FALLBACK.map((name) => ({ id: name, name }));
   }, [feeData]);
 
   // Zones available for the selected city
