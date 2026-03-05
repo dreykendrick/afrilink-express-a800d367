@@ -47,7 +47,7 @@ serve(async (req) => {
 
       const { data, error } = await admin
         .from("products")
-        .select(PUBLIC_PRODUCT_FIELDS)
+        .select(`${PUBLIC_PRODUCT_FIELDS}, vendor:vendors(city_id)`)
         .eq(column, param)
         .eq("is_active", true)
         .maybeSingle();
@@ -59,7 +59,9 @@ serve(async (req) => {
       if (!data) {
         return json({ error: "Product not found" }, 404);
       }
-      return json(data);
+      const vendor_city_id = (data as any).vendor?.city_id ?? null;
+      const { vendor, ...rest } = data as any;
+      return json({ ...rest, vendor_city_id });
     }
 
     // ---- GET /affiliates/:code ----
