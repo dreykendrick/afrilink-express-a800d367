@@ -77,7 +77,7 @@ export default function CheckoutPage() {
       <CheckoutHeader product={product} onBack={handleBack} />
 
       <div className="flex-1 p-4 space-y-6">
-        <BuyerForm buyerInfo={buyerInfo} onChange={setBuyerInfo} />
+        <BuyerForm buyerInfo={buyerInfo} onChange={setBuyerInfo} feeData={feeData} />
         <OrderSummary
           itemPrice={itemPrice}
           deliveryFee={deliveryFee}

@@ -76,29 +76,49 @@ export async function fetchCities(): Promise<Array<{ id: string; name: string }>
   return [...unique.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Calculate delivery fee based on vendor city and buyer city */
+/** Calculate delivery fee based on vendor city, buyer city, and optional zone */
 export function calculateDeliveryFee(
   feeData: DeliveryFeeData | null,
   vendorCityId: string | null,
   buyerCityId: string,
+  zoneId?: string,
 ): number {
-  if (!feeData || !vendorCityId || !buyerCityId) return 0;
+  if (!feeData || !buyerCityId) return 0;
+
+  // If a specific zone is selected, return that zone's fee
+  if (zoneId) {
+    const zone = feeData.zones.find((z) => z.id === zoneId);
+    if (zone) return zone.fee;
+  }
 
   // Same city → use the lowest zone fee (or 0 if no zones configured)
-  if (vendorCityId === buyerCityId) {
+  if (vendorCityId && vendorCityId === buyerCityId) {
     const cityZones = feeData.zones.filter((z) => z.city_id === buyerCityId);
     if (cityZones.length === 0) return 0;
     return Math.min(...cityZones.map((z) => z.fee));
   }
 
   // Cross-city → look up fee in either direction
-  const crossFee = feeData.cross_city_fees.find(
-    (f) =>
-      (f.from_city_id === vendorCityId && f.to_city_id === buyerCityId) ||
-      (f.from_city_id === buyerCityId && f.to_city_id === vendorCityId),
-  );
+  if (vendorCityId) {
+    const crossFee = feeData.cross_city_fees.find(
+      (f) =>
+        (f.from_city_id === vendorCityId && f.to_city_id === buyerCityId) ||
+        (f.from_city_id === buyerCityId && f.to_city_id === vendorCityId),
+    );
+    if (crossFee) return crossFee.fee;
+  }
 
-  return crossFee?.fee ?? 0;
+  // Fallback: check if there are any zones for the buyer's city
+  const buyerZones = feeData.zones.filter((z) => z.city_id === buyerCityId);
+  if (buyerZones.length > 0) {
+    if (zoneId) {
+      const zone = buyerZones.find((z) => z.id === zoneId);
+      if (zone) return zone.fee;
+    }
+    return Math.min(...buyerZones.map((z) => z.fee));
+  }
+
+  return 0;
 }
 
 // ---- Affiliate ----
