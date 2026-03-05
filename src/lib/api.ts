@@ -55,8 +55,8 @@ function normalizeProduct(p: any): Product {
 
 // ---- Delivery Fees / Cities ----
 
-export function fetchDeliveryFees(): Promise<any> {
-  return apiFetch<any>('/delivery-fees');
+export function fetchDeliveryFees(): Promise<DeliveryFeeData> {
+  return apiFetch<DeliveryFeeData>('/delivery-fees');
 }
 
 export async function fetchCities(): Promise<Array<{ id: string; name: string }>> {
@@ -74,6 +74,31 @@ export async function fetchCities(): Promise<Array<{ id: string; name: string }>
   normalized.forEach((city) => unique.set(city.id, city));
 
   return [...unique.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Calculate delivery fee based on vendor city and buyer city */
+export function calculateDeliveryFee(
+  feeData: DeliveryFeeData | null,
+  vendorCityId: string | null,
+  buyerCityId: string,
+): number {
+  if (!feeData || !vendorCityId || !buyerCityId) return 0;
+
+  // Same city → use the lowest zone fee (or 0 if no zones configured)
+  if (vendorCityId === buyerCityId) {
+    const cityZones = feeData.zones.filter((z) => z.city_id === buyerCityId);
+    if (cityZones.length === 0) return 0;
+    return Math.min(...cityZones.map((z) => z.fee));
+  }
+
+  // Cross-city → look up fee in either direction
+  const crossFee = feeData.cross_city_fees.find(
+    (f) =>
+      (f.from_city_id === vendorCityId && f.to_city_id === buyerCityId) ||
+      (f.from_city_id === buyerCityId && f.to_city_id === vendorCityId),
+  );
+
+  return crossFee?.fee ?? 0;
 }
 
 // ---- Affiliate ----

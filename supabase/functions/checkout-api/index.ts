@@ -88,16 +88,24 @@ serve(async (req) => {
     if (route === "delivery-fees" && req.method === "GET") {
       const admin = getAdminClient();
 
-      const [{ data: cities, error: citiesError }, { data: zones, error: zonesError }] = await Promise.all([
+      const [
+        { data: cities, error: citiesError },
+        { data: zones, error: zonesError },
+        { data: crossFees, error: crossError },
+      ] = await Promise.all([
         admin.from("cities").select("id, name").order("name", { ascending: true }),
         admin
           .from("same_city_zones")
           .select("id, city_id, zone_name, fee, city:cities(name)")
           .order("zone_name", { ascending: true }),
+        admin
+          .from("cross_city_fees")
+          .select("id, from_city_id, to_city_id, fee, from_city:cities!cross_city_fees_from_city_id_fkey(name), to_city:cities!cross_city_fees_to_city_id_fkey(name)")
+          .order("fee", { ascending: true }),
       ]);
 
-      if (citiesError || zonesError) {
-        console.error("Delivery fees lookup error:", { citiesError, zonesError });
+      if (citiesError || zonesError || crossError) {
+        console.error("Delivery fees lookup error:", { citiesError, zonesError, crossError });
         return json({ error: "Unable to load delivery fees" }, 500);
       }
 
@@ -109,6 +117,14 @@ serve(async (req) => {
           city_name: z.city?.name ?? null,
           zone_name: z.zone_name,
           fee: z.fee,
+        })),
+        cross_city_fees: (crossFees ?? []).map((c: any) => ({
+          id: c.id,
+          from_city_id: c.from_city_id,
+          to_city_id: c.to_city_id,
+          fee: c.fee,
+          from_city_name: c.from_city?.name ?? null,
+          to_city_name: c.to_city?.name ?? null,
         })),
       });
     }

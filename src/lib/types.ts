@@ -3,6 +3,7 @@
 export interface Product {
   id: string;
   vendor_id: string;
+  vendor_city_id: string | null;
   slug: string;
   name: string;
   price: number;
@@ -12,6 +13,12 @@ export interface Product {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface DeliveryFeeData {
+  cities: Array<{ id: string; name: string }>;
+  zones: Array<{ id: string; city_id: string; city_name: string | null; zone_name: string; fee: number }>;
+  cross_city_fees: Array<{ id: string; from_city_id: string; to_city_id: string; fee: number }>;
 }
 
 export interface BuyerInfo {
