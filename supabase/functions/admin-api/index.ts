@@ -7,6 +7,97 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-admin-key",
 };
 
+// ── Briq Payout Adapter ──────────────────────────────────────────────
+
+const BRIQ_BASE_URL = "https://api.briq.tz";
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
+async function getBriqToken(): Promise<string> {
+  // Return cached token if still valid (with 5-min buffer)
+  if (cachedToken && Date.now() < cachedToken.expiresAt - 5 * 60 * 1000) {
+    return cachedToken.token;
+  }
+
+  const apiKey = Deno.env.get("BRIQ_API_KEY");
+  const apiSecret = Deno.env.get("BRIQ_API_SECRET");
+  if (!apiKey || !apiSecret) {
+    throw new Error("BRIQ_API_KEY or BRIQ_API_SECRET not configured");
+  }
+
+  const credentials = btoa(`${apiKey}:${apiSecret}`);
+  const res = await fetch(`${BRIQ_BASE_URL}/auth`, {
+    method: "POST",
+    headers: { Authorization: `Basic ${credentials}` },
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Briq auth failed (${res.status}): ${body}`);
+  }
+
+  const data = await res.json();
+  // Cache for ~47 hours (assuming ~48h validity)
+  cachedToken = {
+    token: data.access_token,
+    expiresAt: Date.now() + 47 * 60 * 60 * 1000,
+  };
+  return data.access_token;
+}
+
+interface BriqPayoutRequest {
+  amount: number;
+  currency: string;
+  recipientName: string;
+  accountNumber: string;
+  bankCode: string;
+  reference: string;
+  description: string;
+}
+
+interface BriqPayoutResponse {
+  status: string;
+  reference: string;
+  transaction_id: string;
+  created_at: string;
+}
+
+async function createBriqPayout(params: BriqPayoutRequest): Promise<BriqPayoutResponse> {
+  const token = await getBriqToken();
+
+  const res = await fetch(`${BRIQ_BASE_URL}/v1/payouts`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      amount: params.amount,
+      currency: params.currency,
+      recipient: {
+        name: params.recipientName,
+        account_number: params.accountNumber,
+        bank_code: params.bankCode,
+      },
+      reference: params.reference,
+      description: params.description,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    // If auth expired, clear cache and retry once
+    if (res.status === 401 && cachedToken) {
+      cachedToken = null;
+      return createBriqPayout(params);
+    }
+    throw new Error(`Briq payout failed (${res.status}): ${body}`);
+  }
+
+  return await res.json();
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
 function getAdminClient() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -37,6 +128,22 @@ function getSearchParams(url: URL) {
   const get = (k: string) => url.searchParams.get(k) || undefined;
   return { get };
 }
+
+/** Look up payout account details for a recipient to get name, number, and bank code */
+async function getPayoutAccountDetails(admin: ReturnType<typeof getAdminClient>, recipientId: string, payoutAccountId?: string | null) {
+  let query = admin.from("payout_accounts").select("*").eq("owner_id", recipientId);
+
+  if (payoutAccountId) {
+    query = query.eq("id", payoutAccountId);
+  } else {
+    query = query.eq("is_default", true);
+  }
+
+  const { data } = await query.maybeSingle();
+  return data;
+}
+
+// ── Main Handler ─────────────────────────────────────────────────────
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -176,13 +283,16 @@ serve(async (req) => {
       // Create idempotency key
       const idempotencyKey = `manual_${recipientId}_${Date.now()}`;
 
+      // Look up payout account for recipient details
+      const account = await getPayoutAccountDetails(admin, recipientId, payoutAccountId);
+
       // Create payout record
       const { data: payout, error: payoutErr } = await admin
         .from("payouts")
         .insert({
           recipient_id: recipientId,
           recipient_type: recipientType,
-          payout_account_id: payoutAccountId || null,
+          payout_account_id: account?.id || payoutAccountId || null,
           amount,
           currency: currency || "TZS",
           status: "processing",
@@ -214,15 +324,56 @@ serve(async (req) => {
           .in("id", lineIds);
       }
 
-      // TODO: Call MeetPay payout adapter here
-      // const meetpayResult = await createPayout({ recipientId, amount, currency, payoutAccountId });
-      // For now, mark as completed (adapter placeholder)
+      // Call Briq payout API
+      let briqResult: BriqPayoutResponse | null = null;
+      let payoutStatus = "completed";
+      let providerRef: string | null = null;
+      let payoutNotes: string | null = null;
+
+      if (account) {
+        try {
+          const reference = `afrilink_manual_${payout.id}`;
+          briqResult = await createBriqPayout({
+            amount,
+            currency: currency || "TZS",
+            recipientName: account.account_name || "Recipient",
+            accountNumber: account.account_number,
+            bankCode: account.provider || "MPESA",
+            reference,
+            description: `Manual payout for ${recipientType} ${recipientId}`,
+          });
+          payoutStatus = briqResult.status === "processing" ? "processing" : briqResult.status;
+          providerRef = briqResult.transaction_id;
+        } catch (err) {
+          console.error("Briq payout error:", err);
+          payoutStatus = "failed";
+          payoutNotes = `Briq API error: ${(err as Error).message}`;
+        }
+      } else {
+        payoutStatus = "failed";
+        payoutNotes = "No payout account found for recipient";
+      }
+
       await admin
         .from("payouts")
-        .update({ status: "completed", provider_reference: `manual_${payout.id}` })
+        .update({ status: payoutStatus, provider_reference: providerRef, notes: payoutNotes })
         .eq("id", payout.id);
 
-      return json({ payout_id: payout.id, status: "completed", lines_marked: lineIds.length });
+      // If payout failed, revert ledger lines back to pending
+      if (payoutStatus === "failed" && lineIds.length > 0) {
+        await admin
+          .from("order_ledger")
+          .update({ status: "pending", payout_id: null, paid_at: null })
+          .in("id", lineIds);
+      }
+
+      return json({
+        payout_id: payout.id,
+        status: payoutStatus,
+        provider_reference: providerRef,
+        lines_marked: payoutStatus === "failed" ? 0 : lineIds.length,
+        error: payoutNotes,
+      });
     }
 
     // ========== GET /admin/payout-accounts ==========
@@ -245,7 +396,6 @@ serve(async (req) => {
       const body = await req.json();
       const { enabled, frequency, runHour, minThreshold, holdDays } = body;
 
-      // Get existing settings row
       const { data: existing } = await admin
         .from("payout_settings")
         .select("id")
@@ -276,7 +426,6 @@ serve(async (req) => {
 
     // ========== POST /admin/payouts/run-scheduled ==========
     if (route === "admin" && subRoute === "payouts" && segments[2] === "run-scheduled" && req.method === "POST") {
-      // Load payout settings
       const { data: settings } = await admin
         .from("payout_settings")
         .select("*")
@@ -292,7 +441,6 @@ serve(async (req) => {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - holdDays);
 
-      // Find all pending ledger entries older than hold period, not yet paid out
       const { data: eligibleLines, error: eligErr } = await admin
         .from("order_ledger")
         .select("id, recipient_id, recipient_type, amount")
@@ -319,7 +467,7 @@ serve(async (req) => {
       }
 
       let processed = 0;
-      const results: Array<{ recipientId: string; amount: number; status: string }> = [];
+      const results: Array<{ recipientId: string; amount: number; status: string; provider_reference?: string; error?: string }> = [];
 
       for (const [key, group] of Object.entries(grouped)) {
         if (group.total < minThreshold) continue;
@@ -340,19 +488,19 @@ serve(async (req) => {
         }
 
         // Find default payout account
-        const { data: account } = await admin
-          .from("payout_accounts")
-          .select("id")
-          .eq("owner_id", recipientId)
-          .eq("is_default", true)
-          .maybeSingle();
+        const account = await getPayoutAccountDetails(admin, recipientId);
+
+        if (!account) {
+          results.push({ recipientId, amount: group.total, status: "skipped", error: "No payout account configured" });
+          continue;
+        }
 
         const { data: payout, error: payoutErr } = await admin
           .from("payouts")
           .insert({
             recipient_id: recipientId,
             recipient_type: group.recipientType,
-            payout_account_id: account?.id || null,
+            payout_account_id: account.id,
             amount: group.total,
             status: "processing",
             idempotency_key: idempotencyKey,
@@ -361,7 +509,7 @@ serve(async (req) => {
           .single();
 
         if (payoutErr) {
-          results.push({ recipientId, amount: group.total, status: "error" });
+          results.push({ recipientId, amount: group.total, status: "error", error: payoutErr.message });
           continue;
         }
 
@@ -372,14 +520,43 @@ serve(async (req) => {
           .update({ status: "paid_out", payout_id: payout.id, paid_at: new Date().toISOString() })
           .in("id", lineIds);
 
-        // TODO: Call MeetPay payout adapter
+        // Call Briq payout API
+        let payoutStatus = "completed";
+        let providerRef: string | null = null;
+        let payoutNotes: string | null = null;
+
+        try {
+          const reference = `afrilink_scheduled_${payout.id}`;
+          const briqResult = await createBriqPayout({
+            amount: group.total,
+            currency: "TZS",
+            recipientName: account.account_name || "Recipient",
+            accountNumber: account.account_number,
+            bankCode: account.provider || "MPESA",
+            reference,
+            description: `Scheduled payout for ${group.recipientType} ${recipientId}`,
+          });
+          payoutStatus = briqResult.status === "processing" ? "processing" : briqResult.status;
+          providerRef = briqResult.transaction_id;
+        } catch (err) {
+          console.error("Briq scheduled payout error:", err);
+          payoutStatus = "failed";
+          payoutNotes = `Briq API error: ${(err as Error).message}`;
+
+          // Revert ledger lines on failure
+          await admin
+            .from("order_ledger")
+            .update({ status: "pending", payout_id: null, paid_at: null })
+            .in("id", lineIds);
+        }
+
         await admin
           .from("payouts")
-          .update({ status: "completed", provider_reference: `scheduled_${payout.id}` })
+          .update({ status: payoutStatus, provider_reference: providerRef, notes: payoutNotes })
           .eq("id", payout.id);
 
-        processed++;
-        results.push({ recipientId, amount: group.total, status: "completed" });
+        if (payoutStatus !== "failed") processed++;
+        results.push({ recipientId, amount: group.total, status: payoutStatus, provider_reference: providerRef || undefined, error: payoutNotes || undefined });
       }
 
       return json({ message: "Scheduled payout run complete", processed, results });
