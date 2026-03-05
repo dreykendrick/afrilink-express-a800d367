@@ -28,6 +28,7 @@ export default function CheckoutPage() {
     name: '',
     phone: '',
     city: '',
+    zone_id: '',
     area: '',
     landmark: '',
     notes: '',
@@ -42,8 +43,8 @@ export default function CheckoutPage() {
   }, []);
 
   const deliveryFee = useMemo(
-    () => calculateDeliveryFee(feeData, product?.vendor_city_id ?? null, buyerInfo.city),
-    [feeData, product?.vendor_city_id, buyerInfo.city],
+    () => calculateDeliveryFee(feeData, product?.vendor_city_id ?? null, buyerInfo.city, buyerInfo.zone_id || undefined),
+    [feeData, product?.vendor_city_id, buyerInfo.city, buyerInfo.zone_id],
   );
 
   const itemPrice = product?.price || 0;
