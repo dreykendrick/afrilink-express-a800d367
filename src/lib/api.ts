@@ -40,6 +40,7 @@ function normalizeProduct(p: any): Product {
   return {
     id: p.id,
     vendor_id: p.vendor_id ?? '',
+    vendor_city_id: p.vendor_city_id ?? null,
     slug: p.slug ?? '',
     name: p.title ?? p.name ?? '',
     price: p.price ?? 0,
