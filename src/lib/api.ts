@@ -27,7 +27,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
 // ---- Product ----
 
-import type { Product, Order, CheckoutPayload, CheckoutResult } from '@/lib/types';
+import type { Product, Order, CheckoutPayload, CheckoutResult, DeliveryFeeData } from '@/lib/types';
 
 export async function fetchProduct(idOrSlug: string): Promise<Product> {
   const raw = await apiFetch<any>(`/products/${encodeURIComponent(idOrSlug)}`);
