@@ -74,9 +74,13 @@ export function BuyerForm({ buyerInfo, onChange }: BuyerFormProps) {
             <SelectValue placeholder="Select your city" />
           </SelectTrigger>
           <SelectContent>
-            {cities.map((c) => (
-              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-            ))}
+            {cities.length > 0 ? (
+              cities.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))
+            ) : (
+              <SelectItem value="__no_city_available__" disabled>No cities available</SelectItem>
+            )}
           </SelectContent>
         </Select>
       </div>

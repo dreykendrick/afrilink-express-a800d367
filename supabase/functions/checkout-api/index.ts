@@ -82,6 +82,35 @@ serve(async (req) => {
       return json(data);
     }
 
+    // ---- GET /delivery-fees ----
+    if (route === "delivery-fees" && req.method === "GET") {
+      const admin = getAdminClient();
+
+      const [{ data: cities, error: citiesError }, { data: zones, error: zonesError }] = await Promise.all([
+        admin.from("cities").select("id, name").order("name", { ascending: true }),
+        admin
+          .from("same_city_zones")
+          .select("id, city_id, zone_name, fee, city:cities(name)")
+          .order("zone_name", { ascending: true }),
+      ]);
+
+      if (citiesError || zonesError) {
+        console.error("Delivery fees lookup error:", { citiesError, zonesError });
+        return json({ error: "Unable to load delivery fees" }, 500);
+      }
+
+      return json({
+        cities: cities ?? [],
+        zones: (zones ?? []).map((z: any) => ({
+          id: z.id,
+          city_id: z.city_id,
+          city_name: z.city?.name ?? null,
+          zone_name: z.zone_name,
+          fee: z.fee,
+        })),
+      });
+    }
+
     // ---- POST /affiliate-clicks or /track-click ----
     if ((route === "affiliate-clicks" || route === "track-click") && req.method === "POST") {
       const body = await req.json();
