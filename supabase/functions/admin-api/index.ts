@@ -562,6 +562,169 @@ serve(async (req) => {
       return json({ message: "Scheduled payout run complete", processed, results });
     }
 
+    // ========== GET /admin/cities ==========
+    if (route === "admin" && subRoute === "cities" && req.method === "GET") {
+      const { data, error } = await admin
+        .from("cities")
+        .select("id, name, created_at")
+        .order("name", { ascending: true });
+      if (error) return json({ error: error.message }, 500);
+      return json({ cities: data });
+    }
+
+    // ========== POST /admin/cities ==========
+    if (route === "admin" && subRoute === "cities" && req.method === "POST") {
+      const body = await req.json();
+      const { name } = body;
+      if (!name) return json({ error: "name is required" }, 400);
+
+      const { data, error } = await admin
+        .from("cities")
+        .insert({ name })
+        .select()
+        .single();
+      if (error) return json({ error: error.message }, 500);
+      return json(data, 201);
+    }
+
+    // ========== PUT /admin/cities/:id ==========
+    if (route === "admin" && subRoute === "cities" && segments[2] && req.method === "PUT") {
+      const cityId = segments[2];
+      const body = await req.json();
+      const { name } = body;
+      if (!name) return json({ error: "name is required" }, 400);
+
+      const { data, error } = await admin
+        .from("cities")
+        .update({ name })
+        .eq("id", cityId)
+        .select()
+        .single();
+      if (error) return json({ error: error.message }, 500);
+      return json(data);
+    }
+
+    // ========== DELETE /admin/cities/:id ==========
+    if (route === "admin" && subRoute === "cities" && segments[2] && req.method === "DELETE") {
+      const cityId = segments[2];
+      const { error } = await admin.from("cities").delete().eq("id", cityId);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+
+    // ========== GET /admin/zones ==========
+    if (route === "admin" && subRoute === "zones" && req.method === "GET") {
+      let query = admin
+        .from("same_city_zones")
+        .select("id, city_id, zone_name, fee, created_at, city:cities(id, name)")
+        .order("zone_name", { ascending: true });
+
+      const cityId = sp.get("cityId");
+      if (cityId) query = query.eq("city_id", cityId);
+
+      const { data, error } = await query;
+      if (error) return json({ error: error.message }, 500);
+      return json({ zones: data });
+    }
+
+    // ========== POST /admin/zones ==========
+    if (route === "admin" && subRoute === "zones" && req.method === "POST") {
+      const body = await req.json();
+      const { city_id, zone_name, fee } = body;
+      if (!city_id || !zone_name) return json({ error: "city_id and zone_name are required" }, 400);
+
+      const { data, error } = await admin
+        .from("same_city_zones")
+        .insert({ city_id, zone_name, fee: fee ?? 0 })
+        .select("id, city_id, zone_name, fee, created_at, city:cities(id, name)")
+        .single();
+      if (error) return json({ error: error.message }, 500);
+      return json(data, 201);
+    }
+
+    // ========== PUT /admin/zones/:id ==========
+    if (route === "admin" && subRoute === "zones" && segments[2] && req.method === "PUT") {
+      const zoneId = segments[2];
+      const body = await req.json();
+      const updates: Record<string, unknown> = {};
+      if (body.city_id !== undefined) updates.city_id = body.city_id;
+      if (body.zone_name !== undefined) updates.zone_name = body.zone_name;
+      if (body.fee !== undefined) updates.fee = body.fee;
+
+      if (Object.keys(updates).length === 0) return json({ error: "No fields to update" }, 400);
+
+      const { data, error } = await admin
+        .from("same_city_zones")
+        .update(updates)
+        .eq("id", zoneId)
+        .select("id, city_id, zone_name, fee, created_at, city:cities(id, name)")
+        .single();
+      if (error) return json({ error: error.message }, 500);
+      return json(data);
+    }
+
+    // ========== DELETE /admin/zones/:id ==========
+    if (route === "admin" && subRoute === "zones" && segments[2] && req.method === "DELETE") {
+      const zoneId = segments[2];
+      const { error } = await admin.from("same_city_zones").delete().eq("id", zoneId);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+
+    // ========== GET /admin/cross-city-fees ==========
+    if (route === "admin" && subRoute === "cross-city-fees" && req.method === "GET") {
+      const { data, error } = await admin
+        .from("cross_city_fees")
+        .select("id, from_city_id, to_city_id, fee, created_at, from_city:cities!cross_city_fees_from_city_id_fkey(id, name), to_city:cities!cross_city_fees_to_city_id_fkey(id, name)")
+        .order("fee", { ascending: true });
+      if (error) return json({ error: error.message }, 500);
+      return json({ routes: data });
+    }
+
+    // ========== POST /admin/cross-city-fees ==========
+    if (route === "admin" && subRoute === "cross-city-fees" && req.method === "POST") {
+      const body = await req.json();
+      const { from_city_id, to_city_id, fee } = body;
+      if (!from_city_id || !to_city_id) return json({ error: "from_city_id and to_city_id are required" }, 400);
+
+      const { data, error } = await admin
+        .from("cross_city_fees")
+        .insert({ from_city_id, to_city_id, fee: fee ?? 0 })
+        .select("id, from_city_id, to_city_id, fee, created_at, from_city:cities!cross_city_fees_from_city_id_fkey(id, name), to_city:cities!cross_city_fees_to_city_id_fkey(id, name)")
+        .single();
+      if (error) return json({ error: error.message }, 500);
+      return json(data, 201);
+    }
+
+    // ========== PUT /admin/cross-city-fees/:id ==========
+    if (route === "admin" && subRoute === "cross-city-fees" && segments[2] && req.method === "PUT") {
+      const feeId = segments[2];
+      const body = await req.json();
+      const updates: Record<string, unknown> = {};
+      if (body.from_city_id !== undefined) updates.from_city_id = body.from_city_id;
+      if (body.to_city_id !== undefined) updates.to_city_id = body.to_city_id;
+      if (body.fee !== undefined) updates.fee = body.fee;
+
+      if (Object.keys(updates).length === 0) return json({ error: "No fields to update" }, 400);
+
+      const { data, error } = await admin
+        .from("cross_city_fees")
+        .update(updates)
+        .eq("id", feeId)
+        .select("id, from_city_id, to_city_id, fee, created_at, from_city:cities!cross_city_fees_from_city_id_fkey(id, name), to_city:cities!cross_city_fees_to_city_id_fkey(id, name)")
+        .single();
+      if (error) return json({ error: error.message }, 500);
+      return json(data);
+    }
+
+    // ========== DELETE /admin/cross-city-fees/:id ==========
+    if (route === "admin" && subRoute === "cross-city-fees" && segments[2] && req.method === "DELETE") {
+      const feeId = segments[2];
+      const { error } = await admin.from("cross_city_fees").delete().eq("id", feeId);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+
     return json({ error: "Not found" }, 404);
   } catch (err) {
     console.error("Admin API error:", err);
