@@ -69,7 +69,7 @@ export function BuyerForm({ buyerInfo, onChange }: BuyerFormProps) {
           <MapPin className="w-4 h-4" />
           City
         </Label>
-        <Select value={buyerInfo.city} onValueChange={(v) => updateField('city', v)}>
+        <Select value={buyerInfo.city || undefined} onValueChange={(v) => updateField('city', v)}>
           <SelectTrigger className="h-12">
             <SelectValue placeholder="Select your city" />
           </SelectTrigger>
