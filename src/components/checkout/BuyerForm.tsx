@@ -7,17 +7,31 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { fetchCities } from '@/lib/api';
 import type { BuyerInfo } from '@/lib/types';
 
+const TZ_CITIES = [
+  "Arusha","Babati","Bagamoyo","Bariadi","Bukoba","Bunda","Chalinze","Chake Chake",
+  "Dar es Salaam","Dodoma","Geita","Handeni","Ifakara","Iringa","Kahama","Kibaha",
+  "Kigoma","Kilosa","Korogwe","Lindi","Mafinga","Magu","Makambako","Makurdi",
+  "Manyoni","Masasi","Mbeya","Misungwi","Morogoro","Moshi","Mpanda","Mtwara",
+  "Musoma","Mwanza","Nansio","Newala","Ngara","Njombe","Nzega","Pangani",
+  "Same","Sengerema","Shinyanga","Singida","Sumbawanga","Tabora","Tanga","Tarime",
+  "Tunduma","Turiani","Usa River","Uvinza","Vwawa","Wete","Zanzibar City"
+].sort();
+
 interface BuyerFormProps {
   buyerInfo: BuyerInfo;
   onChange: (info: BuyerInfo) => void;
 }
 
 export function BuyerForm({ buyerInfo, onChange }: BuyerFormProps) {
-  const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
+  const [cities, setCities] = useState<{ id: string; name: string }[]>(
+    TZ_CITIES.map((name) => ({ id: name, name }))
+  );
 
   useEffect(() => {
     fetchCities()
-      .then((data) => setCities(data))
+      .then((data) => {
+        if (data && data.length > 0) setCities(data);
+      })
       .catch((err) => console.error('Failed to load cities:', err));
   }, []);
 
