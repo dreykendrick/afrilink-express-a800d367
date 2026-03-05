@@ -59,8 +59,15 @@ function normalizeProduct(p: any): Product {
 
 // ---- Delivery Fees / Cities ----
 
-export function fetchDeliveryFees(): Promise<DeliveryFeeData> {
-  return apiFetch<DeliveryFeeData>('/delivery-fees');
+export async function fetchDeliveryFees(): Promise<DeliveryFeeData> {
+  const res = await fetch(`${LOCAL_API_BASE}/checkout-api/delivery-fees`, {
+    headers: {
+      'apikey': LOCAL_ANON_KEY,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!res.ok) throw new Error('Failed to load delivery fees');
+  return res.json();
 }
 
 export async function fetchCities(): Promise<Array<{ id: string; name: string }>> {
