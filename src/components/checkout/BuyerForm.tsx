@@ -23,7 +23,7 @@ export function BuyerForm({ buyerInfo, onChange, feeData }: BuyerFormProps) {
     if (feeData?.cities && feeData.cities.length > 0) {
       return feeData.cities;
     }
-    return TZ_CITIES.map((name) => ({ id: name, name }));
+    return TZ_CITIES_FALLBACK.map((name) => ({ id: name, name }));
   }, [feeData]);
 
   // Zones available for the selected city
