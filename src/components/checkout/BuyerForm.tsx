@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
-import { User, Phone, MapPin, MessageSquare } from 'lucide-react';
+import { useMemo } from 'react';
+import { User, Phone, MapPin, MessageSquare, Navigation } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { fetchCities } from '@/lib/api';
-import type { BuyerInfo } from '@/lib/types';
+import { formatPrice } from '@/lib/format';
+import type { BuyerInfo, DeliveryFeeData } from '@/lib/types';
 
 const TZ_CITIES = [
   "Arusha","Babati","Bagamoyo","Bariadi","Bukoba","Bunda","Chalinze","Chake Chake",
@@ -20,23 +20,30 @@ const TZ_CITIES = [
 interface BuyerFormProps {
   buyerInfo: BuyerInfo;
   onChange: (info: BuyerInfo) => void;
+  feeData?: DeliveryFeeData | null;
 }
 
-export function BuyerForm({ buyerInfo, onChange }: BuyerFormProps) {
-  const [cities, setCities] = useState<{ id: string; name: string }[]>(
-    TZ_CITIES.map((name) => ({ id: name, name }))
-  );
+export function BuyerForm({ buyerInfo, onChange, feeData }: BuyerFormProps) {
+  const cities = useMemo(() => {
+    if (feeData?.cities && feeData.cities.length > 0) {
+      return feeData.cities;
+    }
+    return TZ_CITIES.map((name) => ({ id: name, name }));
+  }, [feeData]);
 
-  useEffect(() => {
-    fetchCities()
-      .then((data) => {
-        if (data && data.length > 0) setCities(data);
-      })
-      .catch((err) => console.error('Failed to load cities:', err));
-  }, []);
+  // Zones available for the selected city
+  const availableZones = useMemo(() => {
+    if (!feeData?.zones || !buyerInfo.city) return [];
+    return feeData.zones.filter((z) => z.city_id === buyerInfo.city);
+  }, [feeData, buyerInfo.city]);
 
   const updateField = (field: keyof BuyerInfo, value: string) => {
-    onChange({ ...buyerInfo, [field]: value });
+    const updated = { ...buyerInfo, [field]: value };
+    // Reset zone when city changes
+    if (field === 'city') {
+      updated.zone_id = '';
+    }
+    onChange(updated);
   };
 
   return (
@@ -98,6 +105,31 @@ export function BuyerForm({ buyerInfo, onChange }: BuyerFormProps) {
           </SelectContent>
         </Select>
       </div>
+
+      {/* Zone (shown only when same-city zones exist for selected city) */}
+      {availableZones.length > 0 && (
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2 text-muted-foreground">
+            <Navigation className="w-4 h-4" />
+            Delivery Zone
+          </Label>
+          <Select value={buyerInfo.zone_id || undefined} onValueChange={(v) => updateField('zone_id', v)}>
+            <SelectTrigger className="h-12">
+              <SelectValue placeholder="Select delivery zone" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableZones.map((z) => (
+                <SelectItem key={z.id} value={z.id}>
+                  {z.zone_name} — {formatPrice(z.fee)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Delivery fee depends on your zone
+          </p>
+        </div>
+      )}
 
       {/* Area/Street */}
       <div className="space-y-2">

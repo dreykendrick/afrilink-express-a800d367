@@ -25,6 +25,7 @@ export interface BuyerInfo {
   name: string;
   phone: string;
   city: string;
+  zone_id: string;
   area: string;
   landmark: string;
   notes: string;
