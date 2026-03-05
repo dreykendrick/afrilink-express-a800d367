@@ -42,9 +42,21 @@ export default function CheckoutPage() {
       .catch((err) => console.error('Failed to load delivery fees:', err));
   }, []);
 
+  // Resolve vendor city: prefer vendor_city_id, fallback to matching vendor_city_name against feeData cities
+  const vendorCityId = useMemo(() => {
+    if (product?.vendor_city_id) return product.vendor_city_id;
+    if (product?.vendor_city_name && feeData?.cities) {
+      const match = feeData.cities.find(
+        (c) => c.name.toLowerCase() === product.vendor_city_name!.toLowerCase(),
+      );
+      if (match) return match.id;
+    }
+    return null;
+  }, [product?.vendor_city_id, product?.vendor_city_name, feeData]);
+
   const deliveryFee = useMemo(
-    () => calculateDeliveryFee(feeData, product?.vendor_city_id ?? null, buyerInfo.city, buyerInfo.zone_id || undefined),
-    [feeData, product?.vendor_city_id, buyerInfo.city, buyerInfo.zone_id],
+    () => calculateDeliveryFee(feeData, vendorCityId, buyerInfo.city, buyerInfo.zone_id || undefined),
+    [feeData, vendorCityId, buyerInfo.city, buyerInfo.zone_id],
   );
 
   const itemPrice = product?.price || 0;
