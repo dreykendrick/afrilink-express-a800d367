@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useProduct } from '@/hooks/useProduct';
+import { fetchDeliveryFees, calculateDeliveryFee } from '@/lib/api';
 import { PageLoader } from '@/components/ui/PageLoader';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { CheckoutHeader } from '@/components/checkout/CheckoutHeader';
 import { BuyerForm } from '@/components/checkout/BuyerForm';
 import { OrderSummary } from '@/components/checkout/OrderSummary';
 import { PaymentButton } from '@/components/checkout/PaymentButton';
-import type { BuyerInfo } from '@/lib/types';
+import type { BuyerInfo, DeliveryFeeData } from '@/lib/types';
 
 export default function CheckoutPage() {
   const { slug: identifier } = useParams<{ slug: string }>();
@@ -32,8 +33,20 @@ export default function CheckoutPage() {
     notes: '',
   });
 
+  const [feeData, setFeeData] = useState<DeliveryFeeData | null>(null);
+
+  useEffect(() => {
+    fetchDeliveryFees()
+      .then(setFeeData)
+      .catch((err) => console.error('Failed to load delivery fees:', err));
+  }, []);
+
+  const deliveryFee = useMemo(
+    () => calculateDeliveryFee(feeData, product?.vendor_city_id ?? null, buyerInfo.city),
+    [feeData, product?.vendor_city_id, buyerInfo.city],
+  );
+
   const itemPrice = product?.price || 0;
-  const deliveryFee = 0;
   const totalAmount = itemPrice + deliveryFee;
 
   if (productLoading) {
