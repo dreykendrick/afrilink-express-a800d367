@@ -223,7 +223,7 @@ serve(async (req) => {
       // Look up product + vendor coordinates
       const { data: product, error: prodErr } = await admin
         .from("products")
-        .select("id, price, vendor_id, vendor:vendors(lat, lng)")
+        .select("id, price, vendor_id, vendor:vendors(lat, lng, address)")
         .eq("id", product_id)
         .eq("is_active", true)
         .maybeSingle();
