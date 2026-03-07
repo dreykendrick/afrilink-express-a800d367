@@ -235,9 +235,14 @@ serve(async (req) => {
       const vendorLat = (product as any).vendor?.lat ?? null;
       const vendorLng = (product as any).vendor?.lng ?? null;
 
+      // Vendor location is required
+      if (vendorLat == null || vendorLng == null) {
+        return json({ error: "Vendor location is not configured yet." }, 400);
+      }
+
       // Calculate distance
       let distance_km = 0;
-      if (vendorLat != null && vendorLng != null && delivery_lat != null && delivery_lng != null) {
+      if (delivery_lat != null && delivery_lng != null) {
         distance_km = Math.round(haversineDistance(vendorLat, vendorLng, delivery_lat, delivery_lng) * 10) / 10;
       }
 
