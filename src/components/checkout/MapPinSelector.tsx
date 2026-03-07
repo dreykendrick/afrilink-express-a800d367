@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+// react-leaflet v4 for React 18 compatibility
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { MapPin, Navigation, Search, Loader2 } from 'lucide-react';
