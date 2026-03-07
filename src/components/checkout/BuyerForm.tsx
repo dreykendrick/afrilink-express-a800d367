@@ -2,6 +2,7 @@ import { User, Phone, MapPin, MessageSquare } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { MapPinSelector } from '@/components/checkout/MapPinSelector';
 import type { BuyerInfo } from '@/lib/types';
 
 interface BuyerFormProps {
@@ -12,6 +13,10 @@ interface BuyerFormProps {
 export function BuyerForm({ buyerInfo, onChange }: BuyerFormProps) {
   const updateField = (field: keyof BuyerInfo, value: string | number | null) => {
     onChange({ ...buyerInfo, [field]: value });
+  };
+
+  const handleMapPinChange = (lat: number, lng: number) => {
+    onChange({ ...buyerInfo, delivery_lat: lat, delivery_lng: lng });
   };
 
   return (
@@ -67,41 +72,18 @@ export function BuyerForm({ buyerInfo, onChange }: BuyerFormProps) {
         />
       </div>
 
-      {/* Coordinates — hidden inputs, will be populated by map/geolocation in future */}
-      {/* For now buyers enter lat/lng manually or we use defaults */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="lat" className="text-muted-foreground text-xs">
-            Latitude (optional)
-          </Label>
-          <Input
-            id="lat"
-            type="number"
-            step="any"
-            placeholder="-6.7924"
-            value={buyerInfo.delivery_lat ?? ''}
-            onChange={(e) => updateField('delivery_lat', e.target.value ? parseFloat(e.target.value) : null)}
-            className="h-10 text-sm"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="lng" className="text-muted-foreground text-xs">
-            Longitude (optional)
-          </Label>
-          <Input
-            id="lng"
-            type="number"
-            step="any"
-            placeholder="39.2083"
-            value={buyerInfo.delivery_lng ?? ''}
-            onChange={(e) => updateField('delivery_lng', e.target.value ? parseFloat(e.target.value) : null)}
-            className="h-10 text-sm"
-          />
-        </div>
+      {/* Map Pin Selector */}
+      <div className="space-y-2">
+        <Label className="flex items-center gap-2 text-muted-foreground">
+          <MapPin className="w-4 h-4" />
+          Pin Your Delivery Location
+        </Label>
+        <MapPinSelector
+          lat={buyerInfo.delivery_lat}
+          lng={buyerInfo.delivery_lng}
+          onChange={handleMapPinChange}
+        />
       </div>
-      <p className="text-xs text-muted-foreground -mt-2">
-        Coordinates help us estimate delivery cost more accurately
-      </p>
 
       {/* Landmark */}
       <div className="space-y-2">
