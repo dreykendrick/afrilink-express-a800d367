@@ -562,167 +562,134 @@ serve(async (req) => {
       return json({ message: "Scheduled payout run complete", processed, results });
     }
 
-    // ========== GET /admin/cities ==========
-    if (route === "admin" && subRoute === "cities" && req.method === "GET") {
+    // ========== GET /admin/delivery-settings ==========
+    if (route === "admin" && subRoute === "delivery-settings" && req.method === "GET") {
       const { data, error } = await admin
-        .from("cities")
-        .select("id, name, created_at")
-        .order("name", { ascending: true });
+        .from("delivery_settings")
+        .select("*")
+        .limit(1)
+        .maybeSingle();
+
       if (error) return json({ error: error.message }, 500);
-      return json({ cities: data });
+
+      // Return defaults if no row exists
+      const settings = data || {
+        enabled: true,
+        base_fee: 1500,
+        price_per_km: 500,
+        minimum_fee: 1500,
+        maximum_fee: null,
+        free_delivery_threshold: null,
+        max_delivery_distance_km: null,
+      };
+
+      return json({ settings });
     }
 
-    // ========== POST /admin/cities ==========
-    if (route === "admin" && subRoute === "cities" && req.method === "POST") {
+    // ========== PUT /admin/delivery-settings ==========
+    if (route === "admin" && subRoute === "delivery-settings" && req.method === "PUT") {
       const body = await req.json();
-      const { name } = body;
-      if (!name) return json({ error: "name is required" }, 400);
+      const {
+        enabled,
+        base_fee,
+        price_per_km,
+        minimum_fee,
+        maximum_fee,
+        free_delivery_threshold,
+        max_delivery_distance_km,
+      } = body;
 
-      const { data, error } = await admin
-        .from("cities")
-        .insert({ name })
-        .select()
-        .single();
-      if (error) return json({ error: error.message }, 500);
-      return json(data, 201);
-    }
+      // Validation
+      const errors: string[] = [];
+      if (base_fee !== undefined && (typeof base_fee !== "number" || base_fee < 0))
+        errors.push("base_fee must be a number >= 0");
+      if (price_per_km !== undefined && (typeof price_per_km !== "number" || price_per_km < 0))
+        errors.push("price_per_km must be a number >= 0");
+      if (minimum_fee !== undefined && (typeof minimum_fee !== "number" || minimum_fee < 0))
+        errors.push("minimum_fee must be a number >= 0");
+      if (maximum_fee !== undefined && maximum_fee !== null) {
+        if (typeof maximum_fee !== "number" || maximum_fee < 0)
+          errors.push("maximum_fee must be null or a number >= 0");
+        const effectiveMin = minimum_fee ?? body._current_minimum_fee ?? 0;
+        if (typeof maximum_fee === "number" && typeof effectiveMin === "number" && maximum_fee < effectiveMin)
+          errors.push("maximum_fee must be >= minimum_fee");
+      }
+      if (free_delivery_threshold !== undefined && free_delivery_threshold !== null) {
+        if (typeof free_delivery_threshold !== "number" || free_delivery_threshold < 0)
+          errors.push("free_delivery_threshold must be null or a number >= 0");
+      }
+      if (max_delivery_distance_km !== undefined && max_delivery_distance_km !== null) {
+        if (typeof max_delivery_distance_km !== "number" || max_delivery_distance_km <= 0)
+          errors.push("max_delivery_distance_km must be null or a number > 0");
+      }
 
-    // ========== PUT /admin/cities/:id ==========
-    if (route === "admin" && subRoute === "cities" && segments[2] && req.method === "PUT") {
-      const cityId = segments[2];
-      const body = await req.json();
-      const { name } = body;
-      if (!name) return json({ error: "name is required" }, 400);
+      if (errors.length > 0) {
+        return json({ error: "Validation failed", details: errors }, 400);
+      }
 
-      const { data, error } = await admin
-        .from("cities")
-        .update({ name })
-        .eq("id", cityId)
-        .select()
-        .single();
-      if (error) return json({ error: error.message }, 500);
-      return json(data);
-    }
-
-    // ========== DELETE /admin/cities/:id ==========
-    if (route === "admin" && subRoute === "cities" && segments[2] && req.method === "DELETE") {
-      const cityId = segments[2];
-      const { error } = await admin.from("cities").delete().eq("id", cityId);
-      if (error) return json({ error: error.message }, 500);
-      return json({ ok: true });
-    }
-
-    // ========== GET /admin/zones ==========
-    if (route === "admin" && subRoute === "zones" && req.method === "GET") {
-      let query = admin
-        .from("same_city_zones")
-        .select("id, city_id, zone_name, fee, created_at, city:cities(id, name)")
-        .order("zone_name", { ascending: true });
-
-      const cityId = sp.get("cityId");
-      if (cityId) query = query.eq("city_id", cityId);
-
-      const { data, error } = await query;
-      if (error) return json({ error: error.message }, 500);
-      return json({ zones: data });
-    }
-
-    // ========== POST /admin/zones ==========
-    if (route === "admin" && subRoute === "zones" && req.method === "POST") {
-      const body = await req.json();
-      const { city_id, zone_name, fee } = body;
-      if (!city_id || !zone_name) return json({ error: "city_id and zone_name are required" }, 400);
-
-      const { data, error } = await admin
-        .from("same_city_zones")
-        .insert({ city_id, zone_name, fee: fee ?? 0 })
-        .select("id, city_id, zone_name, fee, created_at, city:cities(id, name)")
-        .single();
-      if (error) return json({ error: error.message }, 500);
-      return json(data, 201);
-    }
-
-    // ========== PUT /admin/zones/:id ==========
-    if (route === "admin" && subRoute === "zones" && segments[2] && req.method === "PUT") {
-      const zoneId = segments[2];
-      const body = await req.json();
+      // Build update object
       const updates: Record<string, unknown> = {};
-      if (body.city_id !== undefined) updates.city_id = body.city_id;
-      if (body.zone_name !== undefined) updates.zone_name = body.zone_name;
-      if (body.fee !== undefined) updates.fee = body.fee;
+      if (typeof enabled === "boolean") updates.enabled = enabled;
+      if (base_fee !== undefined) updates.base_fee = base_fee;
+      if (price_per_km !== undefined) updates.price_per_km = price_per_km;
+      if (minimum_fee !== undefined) updates.minimum_fee = minimum_fee;
+      if (maximum_fee !== undefined) updates.maximum_fee = maximum_fee;
+      if (free_delivery_threshold !== undefined) updates.free_delivery_threshold = free_delivery_threshold;
+      if (max_delivery_distance_km !== undefined) updates.max_delivery_distance_km = max_delivery_distance_km;
 
-      if (Object.keys(updates).length === 0) return json({ error: "No fields to update" }, 400);
+      if (Object.keys(updates).length === 0) {
+        return json({ error: "No fields to update" }, 400);
+      }
 
-      const { data, error } = await admin
-        .from("same_city_zones")
-        .update(updates)
-        .eq("id", zoneId)
-        .select("id, city_id, zone_name, fee, created_at, city:cities(id, name)")
-        .single();
+      // Get existing row (upsert pattern)
+      const { data: existing } = await admin
+        .from("delivery_settings")
+        .select("id")
+        .limit(1)
+        .maybeSingle();
+
+      let data;
+      let error;
+
+      if (existing) {
+        // Cross-validate maximum_fee >= minimum_fee using current DB value
+        if (updates.maximum_fee !== undefined && updates.maximum_fee !== null && updates.minimum_fee === undefined) {
+          const { data: current } = await admin
+            .from("delivery_settings")
+            .select("minimum_fee")
+            .eq("id", existing.id)
+            .single();
+          if (current && typeof updates.maximum_fee === "number" && updates.maximum_fee < current.minimum_fee) {
+            return json({ error: "maximum_fee must be >= current minimum_fee (" + current.minimum_fee + ")" }, 400);
+          }
+        }
+
+        const result = await admin
+          .from("delivery_settings")
+          .update(updates)
+          .eq("id", existing.id)
+          .select()
+          .single();
+        data = result.data;
+        error = result.error;
+      } else {
+        const result = await admin
+          .from("delivery_settings")
+          .insert({
+            enabled: true,
+            base_fee: 1500,
+            price_per_km: 500,
+            minimum_fee: 1500,
+            ...updates,
+          })
+          .select()
+          .single();
+        data = result.data;
+        error = result.error;
+      }
+
       if (error) return json({ error: error.message }, 500);
-      return json(data);
-    }
-
-    // ========== DELETE /admin/zones/:id ==========
-    if (route === "admin" && subRoute === "zones" && segments[2] && req.method === "DELETE") {
-      const zoneId = segments[2];
-      const { error } = await admin.from("same_city_zones").delete().eq("id", zoneId);
-      if (error) return json({ error: error.message }, 500);
-      return json({ ok: true });
-    }
-
-    // ========== GET /admin/cross-city-fees ==========
-    if (route === "admin" && subRoute === "cross-city-fees" && req.method === "GET") {
-      const { data, error } = await admin
-        .from("cross_city_fees")
-        .select("id, from_city_id, to_city_id, fee, created_at, from_city:cities!cross_city_fees_from_city_id_fkey(id, name), to_city:cities!cross_city_fees_to_city_id_fkey(id, name)")
-        .order("fee", { ascending: true });
-      if (error) return json({ error: error.message }, 500);
-      return json({ routes: data });
-    }
-
-    // ========== POST /admin/cross-city-fees ==========
-    if (route === "admin" && subRoute === "cross-city-fees" && req.method === "POST") {
-      const body = await req.json();
-      const { from_city_id, to_city_id, fee } = body;
-      if (!from_city_id || !to_city_id) return json({ error: "from_city_id and to_city_id are required" }, 400);
-
-      const { data, error } = await admin
-        .from("cross_city_fees")
-        .insert({ from_city_id, to_city_id, fee: fee ?? 0 })
-        .select("id, from_city_id, to_city_id, fee, created_at, from_city:cities!cross_city_fees_from_city_id_fkey(id, name), to_city:cities!cross_city_fees_to_city_id_fkey(id, name)")
-        .single();
-      if (error) return json({ error: error.message }, 500);
-      return json(data, 201);
-    }
-
-    // ========== PUT /admin/cross-city-fees/:id ==========
-    if (route === "admin" && subRoute === "cross-city-fees" && segments[2] && req.method === "PUT") {
-      const feeId = segments[2];
-      const body = await req.json();
-      const updates: Record<string, unknown> = {};
-      if (body.from_city_id !== undefined) updates.from_city_id = body.from_city_id;
-      if (body.to_city_id !== undefined) updates.to_city_id = body.to_city_id;
-      if (body.fee !== undefined) updates.fee = body.fee;
-
-      if (Object.keys(updates).length === 0) return json({ error: "No fields to update" }, 400);
-
-      const { data, error } = await admin
-        .from("cross_city_fees")
-        .update(updates)
-        .eq("id", feeId)
-        .select("id, from_city_id, to_city_id, fee, created_at, from_city:cities!cross_city_fees_from_city_id_fkey(id, name), to_city:cities!cross_city_fees_to_city_id_fkey(id, name)")
-        .single();
-      if (error) return json({ error: error.message }, 500);
-      return json(data);
-    }
-
-    // ========== DELETE /admin/cross-city-fees/:id ==========
-    if (route === "admin" && subRoute === "cross-city-fees" && segments[2] && req.method === "DELETE") {
-      const feeId = segments[2];
-      const { error } = await admin.from("cross_city_fees").delete().eq("id", feeId);
-      if (error) return json({ error: error.message }, 500);
-      return json({ ok: true });
+      return json({ settings: data });
     }
 
     return json({ error: "Not found" }, 404);
