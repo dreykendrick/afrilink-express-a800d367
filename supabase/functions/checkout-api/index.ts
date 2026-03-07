@@ -13,6 +13,8 @@ const UUID_REGEX =
 const PUBLIC_PRODUCT_FIELDS =
   "id, vendor_id, slug, name, price, description, short_description, images, is_active, created_at, updated_at";
 
+const EARTH_RADIUS_KM = 6371;
+
 function getAdminClient() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -27,6 +29,77 @@ function json(body: unknown, status = 200) {
   });
 }
 
+// --- Haversine ---
+function toRad(deg: number): number {
+  return (deg * Math.PI) / 180;
+}
+
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return EARTH_RADIUS_KM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// --- Delivery Settings ---
+const DEFAULT_SETTINGS = {
+  enabled: true,
+  base_fee: 1500,
+  price_per_km: 500,
+  minimum_fee: 1500,
+  maximum_fee: null,
+  free_delivery_threshold: null,
+  max_delivery_distance_km: null,
+};
+
+async function getDeliverySettings(admin: ReturnType<typeof getAdminClient>) {
+  const { data, error } = await admin
+    .from("delivery_settings")
+    .select("*")
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return DEFAULT_SETTINGS;
+  return {
+    enabled: data.enabled ?? true,
+    base_fee: data.base_fee ?? 1500,
+    price_per_km: data.price_per_km ?? 500,
+    minimum_fee: data.minimum_fee ?? 1500,
+    maximum_fee: data.maximum_fee ?? null,
+    free_delivery_threshold: data.free_delivery_threshold ?? null,
+    max_delivery_distance_km: data.max_delivery_distance_km ?? null,
+  };
+}
+
+function calculateDeliveryFee(
+  settings: typeof DEFAULT_SETTINGS,
+  distanceKm: number,
+  subtotal: number
+): { fee: number; blocked: boolean; message?: string } {
+  if (!settings.enabled) return { fee: 0, blocked: false };
+
+  if (settings.max_delivery_distance_km != null && distanceKm > settings.max_delivery_distance_km) {
+    return {
+      fee: 0,
+      blocked: true,
+      message: `Delivery not available beyond ${settings.max_delivery_distance_km} km (distance: ${distanceKm} km)`,
+    };
+  }
+
+  if (settings.free_delivery_threshold != null && subtotal >= settings.free_delivery_threshold) {
+    return { fee: 0, blocked: false };
+  }
+
+  let fee = settings.base_fee + distanceKm * settings.price_per_km;
+  fee = Math.max(fee, settings.minimum_fee);
+  if (settings.maximum_fee != null) fee = Math.min(fee, settings.maximum_fee);
+  fee = Math.round(fee / 100) * 100;
+
+  return { fee, blocked: false };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -34,7 +107,6 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    // Path: /checkout-api/<route>/<param>
     const segments = url.pathname.replace(/^\/checkout-api\/?/, "").split("/").filter(Boolean);
     const route = segments[0] || "";
     const param = segments[1] || "";
@@ -47,7 +119,7 @@ serve(async (req) => {
 
       const { data, error } = await admin
         .from("products")
-        .select(`${PUBLIC_PRODUCT_FIELDS}, vendor:vendors(city_id)`)
+        .select(`${PUBLIC_PRODUCT_FIELDS}, vendor:vendors(lat, lng)`)
         .eq(column, param)
         .eq("is_active", true)
         .maybeSingle();
@@ -59,9 +131,10 @@ serve(async (req) => {
       if (!data) {
         return json({ error: "Product not found" }, 404);
       }
-      const vendor_city_id = (data as any).vendor?.city_id ?? null;
+      const vendor_lat = (data as any).vendor?.lat ?? null;
+      const vendor_lng = (data as any).vendor?.lng ?? null;
       const { vendor, ...rest } = data as any;
-      return json({ ...rest, vendor_city_id });
+      return json({ ...rest, vendor_lat, vendor_lng });
     }
 
     // ---- GET /affiliates/:code ----
@@ -84,49 +157,11 @@ serve(async (req) => {
       return json(data);
     }
 
-    // ---- GET /delivery-fees ----
-    if (route === "delivery-fees" && req.method === "GET") {
+    // ---- GET /delivery-settings ----
+    if (route === "delivery-settings" && req.method === "GET") {
       const admin = getAdminClient();
-
-      const [
-        { data: cities, error: citiesError },
-        { data: zones, error: zonesError },
-        { data: crossFees, error: crossError },
-      ] = await Promise.all([
-        admin.from("cities").select("id, name").order("name", { ascending: true }),
-        admin
-          .from("same_city_zones")
-          .select("id, city_id, zone_name, fee, city:cities(name)")
-          .order("zone_name", { ascending: true }),
-        admin
-          .from("cross_city_fees")
-          .select("id, from_city_id, to_city_id, fee, from_city:cities!cross_city_fees_from_city_id_fkey(name), to_city:cities!cross_city_fees_to_city_id_fkey(name)")
-          .order("fee", { ascending: true }),
-      ]);
-
-      if (citiesError || zonesError || crossError) {
-        console.error("Delivery fees lookup error:", { citiesError, zonesError, crossError });
-        return json({ error: "Unable to load delivery fees" }, 500);
-      }
-
-      return json({
-        cities: cities ?? [],
-        zones: (zones ?? []).map((z: any) => ({
-          id: z.id,
-          city_id: z.city_id,
-          city_name: z.city?.name ?? null,
-          zone_name: z.zone_name,
-          fee: z.fee,
-        })),
-        cross_city_fees: (crossFees ?? []).map((c: any) => ({
-          id: c.id,
-          from_city_id: c.from_city_id,
-          to_city_id: c.to_city_id,
-          fee: c.fee,
-          from_city_name: c.from_city?.name ?? null,
-          to_city_name: c.to_city?.name ?? null,
-        })),
-      });
+      const settings = await getDeliverySettings(admin);
+      return json(settings);
     }
 
     // ---- POST /affiliate-clicks or /track-click ----
@@ -140,7 +175,6 @@ serve(async (req) => {
 
       const admin = getAdminClient();
 
-      // If affiliate_code provided instead of affiliate_id, resolve it
       if (!affiliate_id && affiliate_code) {
         const { data: aff } = await admin
           .from("affiliates")
@@ -173,21 +207,22 @@ serve(async (req) => {
     if (route === "checkout" && param === "create" && req.method === "POST") {
       const body = await req.json();
       const {
-        product_id, customer_name, customer_phone, customer_city_id,
-        customer_area, customer_landmark, customer_notes,
+        product_id, customer_name, customer_phone,
+        delivery_address, delivery_lat, delivery_lng,
+        customer_landmark, customer_notes,
         source, buyer_user_id, buyer_role, affiliate_ref, checkout_session_id,
       } = body;
 
-      if (!product_id || !customer_name || !customer_phone || !customer_city_id || !customer_area || !source || !checkout_session_id) {
+      if (!product_id || !customer_name || !customer_phone || !delivery_address || !source || !checkout_session_id) {
         return json({ error: "Missing required fields" }, 400);
       }
 
       const admin = getAdminClient();
 
-      // Look up product for price
+      // Look up product + vendor coordinates
       const { data: product, error: prodErr } = await admin
         .from("products")
-        .select("id, price, vendor_id")
+        .select("id, price, vendor_id, vendor:vendors(lat, lng)")
         .eq("id", product_id)
         .eq("is_active", true)
         .maybeSingle();
@@ -196,7 +231,29 @@ serve(async (req) => {
         return json({ error: "Product not found" }, 404);
       }
 
-      // Resolve affiliate (only for affiliate_link source)
+      const vendorLat = (product as any).vendor?.lat ?? null;
+      const vendorLng = (product as any).vendor?.lng ?? null;
+
+      // Calculate distance
+      let distance_km = 0;
+      if (vendorLat != null && vendorLng != null && delivery_lat != null && delivery_lng != null) {
+        distance_km = Math.round(haversineDistance(vendorLat, vendorLng, delivery_lat, delivery_lng) * 10) / 10;
+      }
+
+      // Get delivery settings & calculate fee
+      const settings = await getDeliverySettings(admin);
+      const item_price = product.price;
+      const subtotal = item_price;
+
+      const deliveryCalc = calculateDeliveryFee(settings, distance_km, subtotal);
+      if (deliveryCalc.blocked) {
+        return json({ error: deliveryCalc.message || "Delivery not available to this location" }, 400);
+      }
+
+      const delivery_fee = deliveryCalc.fee;
+      const total_amount = subtotal + delivery_fee;
+
+      // Resolve affiliate
       let affiliate_id: string | null = null;
       let affiliate_rate_at_purchase: number | null = null;
 
@@ -213,19 +270,12 @@ serve(async (req) => {
         }
       }
 
-      // For marketplace purchases by vendor/affiliate → commission goes to platform
-      // affiliate_id stays null; affiliate_rate_at_purchase captures the rate for platform
       if (source === "marketplace" && (buyer_role === "vendor" || buyer_role === "affiliate")) {
-        // Look up the product's default commission rate (from vendor settings or product)
-        // For now, use a platform default of 5%
         affiliate_rate_at_purchase = 0.05;
-        affiliate_id = null; // platform gets it, not an affiliate
+        affiliate_id = null;
       }
 
       const order_number = `ORD-${Date.now().toString(36).toUpperCase()}`;
-      const item_price = product.price;
-      const delivery_fee = 0; // TODO: calculate from city
-      const total_amount = item_price + delivery_fee;
 
       const { data: order, error: orderErr } = await admin
         .from("orders")
@@ -235,16 +285,19 @@ serve(async (req) => {
           affiliate_id,
           buyer_name: customer_name,
           buyer_phone: customer_phone,
-          buyer_city_id: customer_city_id,
-          buyer_area: customer_area,
+          buyer_area: delivery_address,
           buyer_landmark: customer_landmark || null,
           buyer_notes: customer_notes || null,
+          delivery_address,
+          delivery_lat: delivery_lat || null,
+          delivery_lng: delivery_lng || null,
+          distance_km,
           item_price,
           delivery_fee,
           total_amount,
           order_status: "pending_payment",
           payment_status: "pending",
-          // New unified fields (will work after migration)
+          delivery_settings_snapshot: settings,
           ...(source ? { source } : {}),
           ...(buyer_user_id ? { buyer_user_id } : {}),
           ...(buyer_role ? { buyer_role } : {}),
@@ -261,6 +314,10 @@ serve(async (req) => {
       return json({
         order_id: order.id,
         order_number: order.order_number,
+        subtotal: item_price,
+        distance_km,
+        delivery_fee,
+        total: total_amount,
       }, 201);
     }
 

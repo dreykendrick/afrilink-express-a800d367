@@ -3,8 +3,8 @@
 export interface Product {
   id: string;
   vendor_id: string;
-  vendor_city_id: string | null;
-  vendor_city_name: string | null;
+  vendor_lat: number | null;
+  vendor_lng: number | null;
   slug: string;
   name: string;
   price: number;
@@ -16,18 +16,29 @@ export interface Product {
   updated_at: string;
 }
 
-export interface DeliveryFeeData {
-  cities: Array<{ id: string; name: string }>;
-  zones: Array<{ id: string; city_id: string; city_name: string | null; zone_name: string; fee: number }>;
-  cross_city_fees: Array<{ id: string; from_city_id: string; to_city_id: string; fee: number }>;
+export interface DeliverySettings {
+  enabled: boolean;
+  base_fee: number;
+  price_per_km: number;
+  minimum_fee: number;
+  maximum_fee: number | null;
+  free_delivery_threshold: number | null;
+  max_delivery_distance_km: number | null;
+}
+
+export interface DeliveryEstimate {
+  distance_km: number;
+  delivery_fee: number;
+  is_within_range: boolean;
+  error_message?: string;
 }
 
 export interface BuyerInfo {
   name: string;
   phone: string;
-  city: string;
-  zone_id: string;
-  area: string;
+  delivery_address: string;
+  delivery_lat: number | null;
+  delivery_lng: number | null;
   landmark: string;
   notes: string;
 }
@@ -41,8 +52,9 @@ export interface CheckoutPayload {
   quantity?: number;
   customer_name: string;
   customer_phone: string;
-  customer_city_id: string;
-  customer_area: string;
+  delivery_address: string;
+  delivery_lat: number | null;
+  delivery_lng: number | null;
   customer_landmark?: string;
   customer_notes?: string;
   source: CheckoutSource;
@@ -55,6 +67,10 @@ export interface CheckoutPayload {
 export interface CheckoutResult {
   order_id: string;
   order_number: string;
+  subtotal: number;
+  distance_km: number;
+  delivery_fee: number;
+  total: number;
   payment_url?: string;
   client_secret?: string;
 }
@@ -66,10 +82,13 @@ export interface Order {
   affiliate_id: string | null;
   buyer_name: string;
   buyer_phone: string;
-  buyer_city_id: string;
   buyer_area: string;
   buyer_landmark: string | null;
   buyer_notes: string | null;
+  delivery_address: string | null;
+  delivery_lat: number | null;
+  delivery_lng: number | null;
+  distance_km: number | null;
   item_price: number;
   delivery_fee: number;
   total_amount: number;

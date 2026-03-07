@@ -1,6 +1,6 @@
 /**
  * API helpers – checkout data fetching goes through the main app's checkout-api edge function.
- * Delivery fee data is fetched from this project's own checkout-api.
+ * Delivery settings are fetched from this project's own checkout-api.
  */
 
 const API_BASE = 'https://ckklirhhwndijsjpmnfe.supabase.co/functions/v1';
@@ -31,7 +31,8 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
 // ---- Product ----
 
-import type { Product, Order, CheckoutPayload, CheckoutResult, DeliveryFeeData } from '@/lib/types';
+import type { Product, Order, CheckoutPayload, CheckoutResult, DeliverySettings } from '@/lib/types';
+import { DEFAULT_DELIVERY_SETTINGS } from '@/lib/delivery';
 
 export async function fetchProduct(idOrSlug: string): Promise<Product> {
   const raw = await apiFetch<any>(`/products/${encodeURIComponent(idOrSlug)}`);
@@ -44,8 +45,8 @@ function normalizeProduct(p: any): Product {
   return {
     id: p.id,
     vendor_id: p.vendor_id ?? '',
-    vendor_city_id: p.vendor_city_id ?? null,
-    vendor_city_name: p.vendor_city ?? p.vendor_city_name ?? null,
+    vendor_lat: p.vendor_lat ?? null,
+    vendor_lng: p.vendor_lng ?? null,
     slug: p.slug ?? '',
     name: p.title ?? p.name ?? '',
     price: p.price ?? 0,
@@ -58,79 +59,22 @@ function normalizeProduct(p: any): Product {
   };
 }
 
-// ---- Delivery Fees / Cities ----
+// ---- Delivery Settings ----
 
-export async function fetchDeliveryFees(): Promise<DeliveryFeeData> {
-  const res = await fetch(`${LOCAL_API_BASE}/checkout-api/delivery-fees`, {
-    headers: {
-      'apikey': LOCAL_ANON_KEY,
-      'Content-Type': 'application/json',
-    },
-  });
-  if (!res.ok) throw new Error('Failed to load delivery fees');
-  return res.json();
-}
-
-export async function fetchCities(): Promise<Array<{ id: string; name: string }>> {
-  const payload = await fetchDeliveryFees();
-
-  const directCities = Array.isArray(payload?.cities) ? payload.cities : [];
-  const zoneCities = Array.isArray(payload?.zones) ? payload.zones : [];
-
-  const normalized = [
-    ...directCities.map((c: any) => ({ id: c.id ?? c.city_id ?? c.cityId, name: c.name ?? c.city_name ?? c.city })),
-    ...zoneCities.map((z: any) => ({ id: z.city_id ?? z.cityId ?? z.id, name: z.city_name ?? z.city ?? z.name })),
-  ].filter((c) => c.id && c.name) as Array<{ id: string; name: string }>;
-
-  const unique = new Map<string, { id: string; name: string }>();
-  normalized.forEach((city) => unique.set(city.id, city));
-
-  return [...unique.values()].sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/** Calculate delivery fee based on vendor city, buyer city, and optional zone */
-export function calculateDeliveryFee(
-  feeData: DeliveryFeeData | null,
-  vendorCityId: string | null,
-  buyerCityId: string,
-  zoneId?: string,
-): number {
-  if (!feeData || !buyerCityId) return 0;
-
-  // If a specific zone is selected, return that zone's fee
-  if (zoneId) {
-    const zone = feeData.zones.find((z) => z.id === zoneId);
-    if (zone) return zone.fee;
+export async function fetchDeliverySettings(): Promise<DeliverySettings> {
+  try {
+    const res = await fetch(`${LOCAL_API_BASE}/checkout-api/delivery-settings`, {
+      headers: {
+        'apikey': LOCAL_ANON_KEY,
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!res.ok) throw new Error('Failed to load delivery settings');
+    return res.json();
+  } catch (err) {
+    console.warn('Using default delivery settings:', err);
+    return DEFAULT_DELIVERY_SETTINGS;
   }
-
-  // Same city → use the lowest zone fee (or 0 if no zones configured)
-  if (vendorCityId && vendorCityId === buyerCityId) {
-    const cityZones = feeData.zones.filter((z) => z.city_id === buyerCityId);
-    if (cityZones.length === 0) return 0;
-    return Math.min(...cityZones.map((z) => z.fee));
-  }
-
-  // Cross-city → look up fee in either direction
-  if (vendorCityId) {
-    const crossFee = feeData.cross_city_fees.find(
-      (f) =>
-        (f.from_city_id === vendorCityId && f.to_city_id === buyerCityId) ||
-        (f.from_city_id === buyerCityId && f.to_city_id === vendorCityId),
-    );
-    if (crossFee) return crossFee.fee;
-  }
-
-  // Fallback: check if there are any zones for the buyer's city
-  const buyerZones = feeData.zones.filter((z) => z.city_id === buyerCityId);
-  if (buyerZones.length > 0) {
-    if (zoneId) {
-      const zone = buyerZones.find((z) => z.id === zoneId);
-      if (zone) return zone.fee;
-    }
-    return Math.min(...buyerZones.map((z) => z.fee));
-  }
-
-  return 0;
 }
 
 // ---- Affiliate ----
@@ -168,34 +112,6 @@ export async function createCheckout(payload: CheckoutPayload): Promise<Checkout
 
 export async function confirmCheckoutPayment(orderId: string): Promise<Order> {
   return apiFetch<Order>('/checkout/confirm', {
-    method: 'POST',
-    body: JSON.stringify({ order_id: orderId }),
-  });
-}
-
-// ---- Legacy Order endpoints (kept for backward compat) ----
-
-export interface CreateOrderPayload {
-  product_id: string;
-  customer_name: string;
-  customer_phone: string;
-  customer_city_id: string;
-  customer_area: string;
-  customer_landmark?: string;
-  customer_notes?: string;
-  affiliate_code?: string;
-  checkout_session_id: string;
-}
-
-export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
-  return apiFetch<Order>('/orders', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function confirmPayment(orderId: string): Promise<Order> {
-  return apiFetch<Order>('/confirm-payment', {
     method: 'POST',
     body: JSON.stringify({ order_id: orderId }),
   });
