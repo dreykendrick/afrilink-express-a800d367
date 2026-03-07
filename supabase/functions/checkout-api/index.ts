@@ -133,8 +133,9 @@ serve(async (req) => {
       }
       const vendor_lat = (data as any).vendor?.lat ?? null;
       const vendor_lng = (data as any).vendor?.lng ?? null;
+      const vendor_address = (data as any).vendor?.address ?? null;
       const { vendor, ...rest } = data as any;
-      return json({ ...rest, vendor_lat, vendor_lng });
+      return json({ ...rest, vendor_lat, vendor_lng, vendor_address });
     }
 
     // ---- GET /affiliates/:code ----
