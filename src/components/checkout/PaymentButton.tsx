@@ -11,12 +11,10 @@ interface PaymentButtonProps {
   buyerInfo: BuyerInfo;
   deliveryFee: number;
   totalAmount: number;
+  isWithinRange: boolean;
   onSuccess: (orderId: string) => void;
-  /** Checkout source — defaults to "affiliate_link" for this app */
   source?: CheckoutSource;
-  /** Logged-in user ID if available */
   buyerUserId?: string | null;
-  /** Logged-in user role if available */
   buyerRole?: BuyerRole;
 }
 
@@ -25,6 +23,7 @@ export function PaymentButton({
   buyerInfo,
   deliveryFee,
   totalAmount,
+  isWithinRange,
   onSuccess,
   source = 'affiliate_link',
   buyerUserId = null,
@@ -38,8 +37,8 @@ export function PaymentButton({
     if (!buyerInfo.name.trim()) return 'Please enter your full name';
     if (!buyerInfo.phone.trim()) return 'Please enter your phone number';
     if (!isValidTanzaniaPhone(buyerInfo.phone)) return 'Please enter a valid Tanzania phone number';
-    if (!buyerInfo.city.trim()) return 'Please select your city';
-    if (!buyerInfo.area.trim()) return 'Please enter your area or street';
+    if (!buyerInfo.delivery_address.trim()) return 'Please enter your delivery address';
+    if (!isWithinRange) return 'Delivery is not available to your location';
     return null;
   };
 
@@ -59,14 +58,15 @@ export function PaymentButton({
     try {
       const affiliateRef = source === 'affiliate_link'
         ? (sessionStorage.getItem('afrilink_affiliate') || null)
-        : null; // marketplace never sends affiliate ref
+        : null;
 
       const result = await createCheckout({
         product_id: product.id,
         customer_name: buyerInfo.name.trim(),
         customer_phone: normalizePhone(buyerInfo.phone),
-        customer_city_id: buyerInfo.city.trim(),
-        customer_area: buyerInfo.area.trim(),
+        delivery_address: buyerInfo.delivery_address.trim(),
+        delivery_lat: buyerInfo.delivery_lat,
+        delivery_lng: buyerInfo.delivery_lng,
         customer_landmark: buyerInfo.landmark.trim() || undefined,
         customer_notes: buyerInfo.notes.trim() || undefined,
         source,
@@ -76,13 +76,11 @@ export function PaymentButton({
         checkout_session_id: idempotencyKeyRef.current!,
       });
 
-      // If backend returns a payment URL, redirect to it
       if (result.payment_url) {
         window.location.href = result.payment_url;
         return;
       }
 
-      // Otherwise confirm payment directly (COD / instant)
       await confirmCheckoutPayment(result.order_id);
 
       toast({ title: 'Payment successful!', description: 'Your order has been placed.' });
@@ -96,7 +94,7 @@ export function PaymentButton({
     }
   };
 
-  const isDisabled = isLoading || totalAmount === 0;
+  const isDisabled = isLoading || totalAmount === 0 || !isWithinRange;
 
   return (
     <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/95 backdrop-blur-sm border-t border-border safe-bottom">
@@ -111,6 +109,8 @@ export function PaymentButton({
             <Loader2 className="w-5 h-5 mr-2 animate-spin" />
             Processing...
           </>
+        ) : !isWithinRange ? (
+          'Delivery not available'
         ) : (
           <>
             <CreditCard className="w-5 h-5 mr-2" />

@@ -1,14 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useProduct } from '@/hooks/useProduct';
-import { fetchDeliveryFees, calculateDeliveryFee } from '@/lib/api';
+import { fetchDeliverySettings } from '@/lib/api';
+import { calculateDeliveryEstimate, DEFAULT_DELIVERY_SETTINGS } from '@/lib/delivery';
 import { PageLoader } from '@/components/ui/PageLoader';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { CheckoutHeader } from '@/components/checkout/CheckoutHeader';
 import { BuyerForm } from '@/components/checkout/BuyerForm';
 import { OrderSummary } from '@/components/checkout/OrderSummary';
 import { PaymentButton } from '@/components/checkout/PaymentButton';
-import type { BuyerInfo, DeliveryFeeData } from '@/lib/types';
+import type { BuyerInfo, DeliverySettings } from '@/lib/types';
 
 export default function CheckoutPage() {
   const { slug: identifier } = useParams<{ slug: string }>();
@@ -27,40 +28,37 @@ export default function CheckoutPage() {
   const [buyerInfo, setBuyerInfo] = useState<BuyerInfo>({
     name: '',
     phone: '',
-    city: '',
-    zone_id: '',
-    area: '',
+    delivery_address: '',
+    delivery_lat: null,
+    delivery_lng: null,
     landmark: '',
     notes: '',
   });
 
-  const [feeData, setFeeData] = useState<DeliveryFeeData | null>(null);
+  const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>(DEFAULT_DELIVERY_SETTINGS);
 
   useEffect(() => {
-    fetchDeliveryFees()
-      .then(setFeeData)
-      .catch((err) => console.error('Failed to load delivery fees:', err));
+    fetchDeliverySettings()
+      .then(setDeliverySettings)
+      .catch((err) => console.error('Failed to load delivery settings:', err));
   }, []);
 
-  // Resolve vendor city: prefer vendor_city_id, fallback to matching vendor_city_name against feeData cities
-  const vendorCityId = useMemo(() => {
-    if (product?.vendor_city_id) return product.vendor_city_id;
-    if (product?.vendor_city_name && feeData?.cities) {
-      const match = feeData.cities.find(
-        (c) => c.name.toLowerCase() === product.vendor_city_name!.toLowerCase(),
-      );
-      if (match) return match.id;
-    }
-    return null;
-  }, [product?.vendor_city_id, product?.vendor_city_name, feeData]);
+  const itemPrice = product?.price || 0;
 
-  const deliveryFee = useMemo(
-    () => calculateDeliveryFee(feeData, vendorCityId, buyerInfo.city, buyerInfo.zone_id || undefined),
-    [feeData, vendorCityId, buyerInfo.city, buyerInfo.zone_id],
+  const deliveryEstimate = useMemo(
+    () =>
+      calculateDeliveryEstimate(
+        product?.vendor_lat ?? null,
+        product?.vendor_lng ?? null,
+        buyerInfo.delivery_lat,
+        buyerInfo.delivery_lng,
+        deliverySettings,
+        itemPrice,
+      ),
+    [product?.vendor_lat, product?.vendor_lng, buyerInfo.delivery_lat, buyerInfo.delivery_lng, deliverySettings, itemPrice],
   );
 
-  const itemPrice = product?.price || 0;
-  const totalAmount = itemPrice + deliveryFee;
+  const totalAmount = itemPrice + deliveryEstimate.delivery_fee;
 
   if (productLoading) {
     return <PageLoader message="Loading checkout..." />;
@@ -89,19 +87,23 @@ export default function CheckoutPage() {
       <CheckoutHeader product={product} onBack={handleBack} />
 
       <div className="flex-1 p-4 space-y-6">
-        <BuyerForm buyerInfo={buyerInfo} onChange={setBuyerInfo} feeData={feeData} />
+        <BuyerForm buyerInfo={buyerInfo} onChange={setBuyerInfo} />
         <OrderSummary
           itemPrice={itemPrice}
-          deliveryFee={deliveryFee}
+          deliveryFee={deliveryEstimate.delivery_fee}
           totalAmount={totalAmount}
+          distanceKm={deliveryEstimate.distance_km}
+          isWithinRange={deliveryEstimate.is_within_range}
+          rangeErrorMessage={deliveryEstimate.error_message}
         />
       </div>
 
       <PaymentButton
         product={product}
         buyerInfo={buyerInfo}
-        deliveryFee={deliveryFee}
+        deliveryFee={deliveryEstimate.delivery_fee}
         totalAmount={totalAmount}
+        isWithinRange={deliveryEstimate.is_within_range}
         onSuccess={handleOrderSuccess}
       />
     </div>

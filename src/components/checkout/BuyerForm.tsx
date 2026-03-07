@@ -1,44 +1,17 @@
-import { useMemo } from 'react';
-import { User, Phone, MapPin, MessageSquare, Navigation } from 'lucide-react';
+import { User, Phone, MapPin, MessageSquare } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { formatPrice } from '@/lib/format';
-import type { BuyerInfo, DeliveryFeeData } from '@/lib/types';
-
-// Fallback cities only used when backend returns nothing
-const TZ_CITIES_FALLBACK = [
-  "Arusha","Dar es Salaam","Dodoma","Mbeya","Mwanza","Tanga","Morogoro","Zanzibar City"
-].sort();
+import type { BuyerInfo } from '@/lib/types';
 
 interface BuyerFormProps {
   buyerInfo: BuyerInfo;
   onChange: (info: BuyerInfo) => void;
-  feeData?: DeliveryFeeData | null;
 }
 
-export function BuyerForm({ buyerInfo, onChange, feeData }: BuyerFormProps) {
-  const cities = useMemo(() => {
-    if (feeData?.cities && feeData.cities.length > 0) {
-      return feeData.cities;
-    }
-    return TZ_CITIES_FALLBACK.map((name) => ({ id: name, name }));
-  }, [feeData]);
-
-  // Zones available for the selected city
-  const availableZones = useMemo(() => {
-    if (!feeData?.zones || !buyerInfo.city) return [];
-    return feeData.zones.filter((z) => z.city_id === buyerInfo.city);
-  }, [feeData, buyerInfo.city]);
-
-  const updateField = (field: keyof BuyerInfo, value: string) => {
-    const updated = { ...buyerInfo, [field]: value };
-    // Reset zone when city changes
-    if (field === 'city') {
-      updated.zone_id = '';
-    }
-    onChange(updated);
+export function BuyerForm({ buyerInfo, onChange }: BuyerFormProps) {
+  const updateField = (field: keyof BuyerInfo, value: string | number | null) => {
+    onChange({ ...buyerInfo, [field]: value });
   };
 
   return (
@@ -79,66 +52,56 @@ export function BuyerForm({ buyerInfo, onChange, feeData }: BuyerFormProps) {
         </p>
       </div>
 
-      {/* City */}
+      {/* Delivery Address */}
       <div className="space-y-2">
-        <Label className="flex items-center gap-2 text-muted-foreground">
+        <Label htmlFor="address" className="flex items-center gap-2 text-muted-foreground">
           <MapPin className="w-4 h-4" />
-          City
-        </Label>
-        <Select value={buyerInfo.city || undefined} onValueChange={(v) => updateField('city', v)}>
-          <SelectTrigger className="h-12">
-            <SelectValue placeholder="Select your city" />
-          </SelectTrigger>
-          <SelectContent>
-            {cities.length > 0 ? (
-              cities.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))
-            ) : (
-              <SelectItem value="__no_city_available__" disabled>No cities available</SelectItem>
-            )}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Zone (shown only when same-city zones exist for selected city) */}
-      {availableZones.length > 0 && (
-        <div className="space-y-2">
-          <Label className="flex items-center gap-2 text-muted-foreground">
-            <Navigation className="w-4 h-4" />
-            Delivery Zone
-          </Label>
-          <Select value={buyerInfo.zone_id || undefined} onValueChange={(v) => updateField('zone_id', v)}>
-            <SelectTrigger className="h-12">
-              <SelectValue placeholder="Select delivery zone" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableZones.map((z) => (
-                <SelectItem key={z.id} value={z.id}>
-                  {z.zone_name} — {formatPrice(z.fee)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            Delivery fee depends on your zone
-          </p>
-        </div>
-      )}
-
-      {/* Area/Street */}
-      <div className="space-y-2">
-        <Label htmlFor="area" className="text-muted-foreground">
-          Area / Street
+          Delivery Address
         </Label>
         <Input
-          id="area"
-          placeholder="e.g. Mikocheni, Regent Estate"
-          value={buyerInfo.area}
-          onChange={(e) => updateField('area', e.target.value)}
+          id="address"
+          placeholder="e.g. Mikocheni, Regent Estate, Dar es Salaam"
+          value={buyerInfo.delivery_address}
+          onChange={(e) => updateField('delivery_address', e.target.value)}
           className="h-12"
         />
       </div>
+
+      {/* Coordinates — hidden inputs, will be populated by map/geolocation in future */}
+      {/* For now buyers enter lat/lng manually or we use defaults */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="lat" className="text-muted-foreground text-xs">
+            Latitude (optional)
+          </Label>
+          <Input
+            id="lat"
+            type="number"
+            step="any"
+            placeholder="-6.7924"
+            value={buyerInfo.delivery_lat ?? ''}
+            onChange={(e) => updateField('delivery_lat', e.target.value ? parseFloat(e.target.value) : null)}
+            className="h-10 text-sm"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="lng" className="text-muted-foreground text-xs">
+            Longitude (optional)
+          </Label>
+          <Input
+            id="lng"
+            type="number"
+            step="any"
+            placeholder="39.2083"
+            value={buyerInfo.delivery_lng ?? ''}
+            onChange={(e) => updateField('delivery_lng', e.target.value ? parseFloat(e.target.value) : null)}
+            className="h-10 text-sm"
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground -mt-2">
+        Coordinates help us estimate delivery cost more accurately
+      </p>
 
       {/* Landmark */}
       <div className="space-y-2">

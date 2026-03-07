@@ -34,8 +34,11 @@ export function ReceiptDetails({ order }: ReceiptDetailsProps) {
         <div className="text-sm space-y-1 text-muted-foreground">
           <p className="text-foreground font-medium">{order.buyer_name}</p>
           <p>{formatPhoneDisplay(order.buyer_phone)}</p>
-          <p>{order.buyer_area}</p>
+          <p>{order.delivery_address || order.buyer_area}</p>
           {order.buyer_landmark && <p>{order.buyer_landmark}</p>}
+          {order.distance_km != null && order.distance_km > 0 && (
+            <p className="text-xs">Est. distance: {order.distance_km} km</p>
+          )}
         </div>
       </div>
 
