@@ -140,6 +140,45 @@ export type Database = {
           },
         ]
       }
+      delivery_settings: {
+        Row: {
+          base_fee: number
+          created_at: string
+          enabled: boolean
+          free_delivery_threshold: number | null
+          id: string
+          max_delivery_distance_km: number | null
+          maximum_fee: number | null
+          minimum_fee: number
+          price_per_km: number
+          updated_at: string
+        }
+        Insert: {
+          base_fee?: number
+          created_at?: string
+          enabled?: boolean
+          free_delivery_threshold?: number | null
+          id?: string
+          max_delivery_distance_km?: number | null
+          maximum_fee?: number | null
+          minimum_fee?: number
+          price_per_km?: number
+          updated_at?: string
+        }
+        Update: {
+          base_fee?: number
+          created_at?: string
+          enabled?: boolean
+          free_delivery_threshold?: number | null
+          id?: string
+          max_delivery_distance_km?: number | null
+          maximum_fee?: number | null
+          minimum_fee?: number
+          price_per_km?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       order_issues: {
         Row: {
           created_at: string
@@ -240,7 +279,7 @@ export type Database = {
           affiliate_id: string | null
           affiliate_rate_at_purchase: number | null
           buyer_area: string
-          buyer_city_id: string
+          buyer_city_id: string | null
           buyer_landmark: string | null
           buyer_name: string
           buyer_notes: string | null
@@ -250,7 +289,12 @@ export type Database = {
           confirmation_token: string
           confirmed_at: string | null
           created_at: string
+          delivery_address: string | null
           delivery_fee: number
+          delivery_lat: number | null
+          delivery_lng: number | null
+          delivery_settings_snapshot: Json | null
+          distance_km: number | null
           id: string
           item_price: number
           notification_status: string | null
@@ -267,7 +311,7 @@ export type Database = {
           affiliate_id?: string | null
           affiliate_rate_at_purchase?: number | null
           buyer_area: string
-          buyer_city_id: string
+          buyer_city_id?: string | null
           buyer_landmark?: string | null
           buyer_name: string
           buyer_notes?: string | null
@@ -277,7 +321,12 @@ export type Database = {
           confirmation_token?: string
           confirmed_at?: string | null
           created_at?: string
+          delivery_address?: string | null
           delivery_fee?: number
+          delivery_lat?: number | null
+          delivery_lng?: number | null
+          delivery_settings_snapshot?: Json | null
+          distance_km?: number | null
           id?: string
           item_price: number
           notification_status?: string | null
@@ -294,7 +343,7 @@ export type Database = {
           affiliate_id?: string | null
           affiliate_rate_at_purchase?: number | null
           buyer_area?: string
-          buyer_city_id?: string
+          buyer_city_id?: string | null
           buyer_landmark?: string | null
           buyer_name?: string
           buyer_notes?: string | null
@@ -304,7 +353,12 @@ export type Database = {
           confirmation_token?: string
           confirmed_at?: string | null
           created_at?: string
+          delivery_address?: string | null
           delivery_fee?: number
+          delivery_lat?: number | null
+          delivery_lng?: number | null
+          delivery_settings_snapshot?: Json | null
+          distance_km?: number | null
           id?: string
           item_price?: number
           notification_status?: string | null
@@ -551,6 +605,8 @@ export type Database = {
           city_id: string | null
           created_at: string
           id: string
+          lat: number | null
+          lng: number | null
           name: string
           phone: string
         }
@@ -559,6 +615,8 @@ export type Database = {
           city_id?: string | null
           created_at?: string
           id?: string
+          lat?: number | null
+          lng?: number | null
           name: string
           phone: string
         }
@@ -567,6 +625,8 @@ export type Database = {
           city_id?: string | null
           created_at?: string
           id?: string
+          lat?: number | null
+          lng?: number | null
           name?: string
           phone?: string
         }
