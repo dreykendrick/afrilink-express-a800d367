@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { MapPin, Navigation, Search, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,91 +19,80 @@ interface MapPinSelectorProps {
   onChange: (lat: number, lng: number) => void;
 }
 
-// Default center: Dar es Salaam
 const DEFAULT_CENTER: [number, number] = [-6.7924, 39.2083];
 const DEFAULT_ZOOM = 13;
 const PLACED_ZOOM = 15;
 
-/** Draggable marker that reports position changes */
-function DraggableMarker({
-  position,
-  onMove,
-}: {
-  position: [number, number];
-  onMove: (lat: number, lng: number) => void;
-}) {
-  const markerRef = useRef<L.Marker>(null);
-
-  const eventHandlers = {
-    dragend() {
-      const marker = markerRef.current;
-      if (marker) {
-        const { lat, lng } = marker.getLatLng();
-        onMove(lat, lng);
-      }
-    },
-  };
-
-  return (
-    <Marker
-      draggable
-      eventHandlers={eventHandlers}
-      position={position}
-      ref={markerRef}
-    />
-  );
-}
-
-/** Click-to-place handler */
-function MapClickHandler({ onClick }: { onClick: (lat: number, lng: number) => void }) {
-  useMapEvents({
-    click(e) {
-      onClick(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-}
-
-/** Fly the map to a given position */
-function FlyTo({ position, zoom }: { position: [number, number]; zoom: number }) {
-  const map = useMap();
-  useEffect(() => {
-    map.flyTo(position, zoom, { duration: 1 });
-  }, [position[0], position[1], zoom]);
-  return null;
-}
-
 export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
+  const mapRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const [pinPlaced, setPinPlaced] = useState(lat != null && lng != null);
-  const [position, setPosition] = useState<[number, number]>(
-    lat != null && lng != null ? [lat, lng] : DEFAULT_CENTER,
-  );
-  const [flyTarget, setFlyTarget] = useState<[number, number] | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
 
-  const handlePinMove = useCallback(
-    (newLat: number, newLng: number) => {
-      const pos: [number, number] = [newLat, newLng];
-      setPosition(pos);
+  const placeOrMovePin = useCallback(
+    (newLat: number, newLng: number, fly = true) => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      if (markerRef.current) {
+        markerRef.current.setLatLng([newLat, newLng]);
+      } else {
+        const marker = L.marker([newLat, newLng], { draggable: true }).addTo(map);
+        marker.on('dragend', () => {
+          const pos = marker.getLatLng();
+          onChange(pos.lat, pos.lng);
+        });
+        markerRef.current = marker;
+      }
+
+      if (fly) map.flyTo([newLat, newLng], PLACED_ZOOM, { duration: 1 });
       setPinPlaced(true);
       onChange(newLat, newLng);
     },
     [onChange],
   );
 
-  const handleMapClick = useCallback(
-    (newLat: number, newLng: number) => {
-      const pos: [number, number] = [newLat, newLng];
-      setPosition(pos);
-      setFlyTarget(pos);
-      setPinPlaced(true);
-      onChange(newLat, newLng);
-    },
-    [onChange],
-  );
+  // Initialize map
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+
+    const center: [number, number] =
+      lat != null && lng != null ? [lat, lng] : DEFAULT_CENTER;
+    const zoom = lat != null && lng != null ? PLACED_ZOOM : DEFAULT_ZOOM;
+
+    const map = L.map(containerRef.current, {
+      center,
+      zoom,
+      scrollWheelZoom: true,
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+    }).addTo(map);
+
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      placeOrMovePin(e.latlng.lat, e.latlng.lng);
+    });
+
+    mapRef.current = map;
+
+    // Place initial marker if coordinates exist
+    if (lat != null && lng != null) {
+      placeOrMovePin(lat, lng, false);
+    }
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      markerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleUseMyLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -115,11 +103,7 @@ export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
     setGeoError(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const newPos: [number, number] = [pos.coords.latitude, pos.coords.longitude];
-        setPosition(newPos);
-        setFlyTarget(newPos);
-        setPinPlaced(true);
-        onChange(pos.coords.latitude, pos.coords.longitude);
+        placeOrMovePin(pos.coords.latitude, pos.coords.longitude);
         setGeoLoading(false);
       },
       (err) => {
@@ -132,7 +116,7 @@ export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
       },
       { enableHighAccuracy: true, timeout: 10000 },
     );
-  }, [onChange]);
+  }, [placeOrMovePin]);
 
   const handleSearch = useCallback(
     async (e?: React.FormEvent) => {
@@ -146,21 +130,15 @@ export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
         );
         const results = await res.json();
         if (results.length > 0) {
-          const newLat = parseFloat(results[0].lat);
-          const newLng = parseFloat(results[0].lon);
-          const newPos: [number, number] = [newLat, newLng];
-          setPosition(newPos);
-          setFlyTarget(newPos);
-          setPinPlaced(true);
-          onChange(newLat, newLng);
+          placeOrMovePin(parseFloat(results[0].lat), parseFloat(results[0].lon));
         }
       } catch {
-        // Search failed silently; user can still pin manually
+        // Search failed silently
       } finally {
         setSearchLoading(false);
       }
     },
-    [searchQuery, onChange],
+    [searchQuery, placeOrMovePin],
   );
 
   return (
@@ -189,21 +167,7 @@ export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
 
       {/* Map */}
       <div className="rounded-xl overflow-hidden border border-border relative" style={{ height: 260 }}>
-        <MapContainer
-          center={position}
-          zoom={pinPlaced ? PLACED_ZOOM : DEFAULT_ZOOM}
-          scrollWheelZoom
-          className="w-full h-full z-0"
-          style={{ height: '100%', width: '100%' }}
-        >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          <MapClickHandler onClick={handleMapClick} />
-          {flyTarget && <FlyTo position={flyTarget} zoom={PLACED_ZOOM} />}
-          {pinPlaced && <DraggableMarker position={position} onMove={handlePinMove} />}
-        </MapContainer>
+        <div ref={containerRef} className="w-full h-full z-0" style={{ height: '100%', width: '100%' }} />
 
         {/* Overlay hint when no pin */}
         {!pinPlaced && (
@@ -238,9 +202,7 @@ export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
         )}
       </Button>
 
-      {geoError && (
-        <p className="text-xs text-destructive">{geoError}</p>
-      )}
+      {geoError && <p className="text-xs text-destructive">{geoError}</p>}
 
       {pinPlaced && (
         <p className="text-xs text-muted-foreground flex items-center gap-1">
