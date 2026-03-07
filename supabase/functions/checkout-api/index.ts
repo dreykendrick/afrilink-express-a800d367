@@ -119,7 +119,7 @@ serve(async (req) => {
 
       const { data, error } = await admin
         .from("products")
-        .select(`${PUBLIC_PRODUCT_FIELDS}, vendor:vendors(lat, lng)`)
+        .select(`${PUBLIC_PRODUCT_FIELDS}, vendor:vendors(lat, lng, address)`)
         .eq(column, param)
         .eq("is_active", true)
         .maybeSingle();
