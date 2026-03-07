@@ -119,7 +119,7 @@ serve(async (req) => {
 
       const { data, error } = await admin
         .from("products")
-        .select(`${PUBLIC_PRODUCT_FIELDS}, vendor:vendors(lat, lng)`)
+        .select(`${PUBLIC_PRODUCT_FIELDS}, vendor:vendors(lat, lng, address)`)
         .eq(column, param)
         .eq("is_active", true)
         .maybeSingle();
@@ -133,8 +133,9 @@ serve(async (req) => {
       }
       const vendor_lat = (data as any).vendor?.lat ?? null;
       const vendor_lng = (data as any).vendor?.lng ?? null;
+      const vendor_address = (data as any).vendor?.address ?? null;
       const { vendor, ...rest } = data as any;
-      return json({ ...rest, vendor_lat, vendor_lng });
+      return json({ ...rest, vendor_lat, vendor_lng, vendor_address });
     }
 
     // ---- GET /affiliates/:code ----
@@ -222,7 +223,7 @@ serve(async (req) => {
       // Look up product + vendor coordinates
       const { data: product, error: prodErr } = await admin
         .from("products")
-        .select("id, price, vendor_id, vendor:vendors(lat, lng)")
+        .select("id, price, vendor_id, vendor:vendors(lat, lng, address)")
         .eq("id", product_id)
         .eq("is_active", true)
         .maybeSingle();
@@ -234,9 +235,14 @@ serve(async (req) => {
       const vendorLat = (product as any).vendor?.lat ?? null;
       const vendorLng = (product as any).vendor?.lng ?? null;
 
+      // Vendor location is required
+      if (vendorLat == null || vendorLng == null) {
+        return json({ error: "Vendor location is not configured yet." }, 400);
+      }
+
       // Calculate distance
       let distance_km = 0;
-      if (vendorLat != null && vendorLng != null && delivery_lat != null && delivery_lng != null) {
+      if (delivery_lat != null && delivery_lng != null) {
         distance_km = Math.round(haversineDistance(vendorLat, vendorLng, delivery_lat, delivery_lng) * 10) / 10;
       }
 

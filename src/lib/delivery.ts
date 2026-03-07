@@ -48,8 +48,18 @@ export function calculateDeliveryEstimate(
     return { distance_km: 0, delivery_fee: 0, is_within_range: true };
   }
 
-  // Can't calculate without coordinates
-  if (vendorLat == null || vendorLng == null || buyerLat == null || buyerLng == null) {
+  // Vendor location must be configured
+  if (vendorLat == null || vendorLng == null) {
+    return {
+      distance_km: 0,
+      delivery_fee: 0,
+      is_within_range: false,
+      error_message: 'Vendor location is not configured yet.',
+    };
+  }
+
+  // Can't calculate without buyer coordinates
+  if (buyerLat == null || buyerLng == null) {
     return { distance_km: 0, delivery_fee: settings.minimum_fee, is_within_range: true };
   }
 

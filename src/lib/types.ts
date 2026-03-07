@@ -5,6 +5,7 @@ export interface Product {
   vendor_id: string;
   vendor_lat: number | null;
   vendor_lng: number | null;
+  vendor_address: string | null;
   slug: string;
   name: string;
   price: number;

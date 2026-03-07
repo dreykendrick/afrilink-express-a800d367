@@ -44,6 +44,7 @@ export default function CheckoutPage() {
   }, []);
 
   const itemPrice = product?.price || 0;
+  const vendorLocationMissing = product != null && (product.vendor_lat == null || product.vendor_lng == null);
 
   const deliveryEstimate = useMemo(
     () =>
@@ -58,7 +59,7 @@ export default function CheckoutPage() {
     [product?.vendor_lat, product?.vendor_lng, buyerInfo.delivery_lat, buyerInfo.delivery_lng, deliverySettings, itemPrice],
   );
 
-  const totalAmount = itemPrice + deliveryEstimate.delivery_fee;
+  const totalAmount = vendorLocationMissing ? itemPrice : itemPrice + deliveryEstimate.delivery_fee;
 
   if (productLoading) {
     return <PageLoader message="Loading checkout..." />;
