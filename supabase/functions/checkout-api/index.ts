@@ -122,7 +122,7 @@ function detectNetwork(phone: string): string {
   return networkMap[prefix] || "VODACOM"; // Default to VODACOM
 }
 
-/** Initiate MeetPay mobile money payment */
+/** Initiate MeetPay mobile money payment with retry for transient errors */
 async function initiateMeetPayPayment(params: {
   amount: number;
   phone: string;
@@ -160,34 +160,80 @@ async function initiateMeetPayPayment(params: {
     },
   };
 
-  console.log(`[MeetPay] Initiating payment: ${JSON.stringify({ amount: body.amount, phone: body.phone, network, reference: body.reference })}`);
+  const MAX_RETRIES = 3;
+  let lastError: Error | null = null;
 
-  const res = await fetch(`${MEETPAY_BASE_URL}/payments`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "Idempotency-Key": params.idempotencyKey,
-    },
-    body: JSON.stringify(body),
-  });
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    console.log(`[MeetPay] Attempt ${attempt}/${MAX_RETRIES} - Initiating payment: ${JSON.stringify({ amount: body.amount, phone: body.phone, network, reference: body.reference })}`);
 
-  const responseText = await res.text();
-  let data: any;
-  try {
-    data = JSON.parse(responseText);
-  } catch {
-    console.error(`[MeetPay] Non-JSON response (${res.status}):`, responseText.substring(0, 500));
-    throw new Error(`MeetPay returned non-JSON response (HTTP ${res.status})`);
+    try {
+      const res = await fetch(`${MEETPAY_BASE_URL}/payments`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "Idempotency-Key": params.idempotencyKey,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const responseText = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        console.error(`[MeetPay] Attempt ${attempt} - Non-JSON response (${res.status}):`, responseText.substring(0, 300));
+        lastError = new Error(`MeetPay returned non-JSON response (HTTP ${res.status})`);
+        // Retry on 502/503/504
+        if (res.status >= 500 && attempt < MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, 1000 * attempt));
+          continue;
+        }
+        throw lastError;
+      }
+
+      if (!res.ok) {
+        console.error(`[MeetPay] Attempt ${attempt} - Failed (${res.status}):`, JSON.stringify(data));
+        lastError = new Error(data?.message || data?.error || `MeetPay error: ${res.status}`);
+        if (res.status >= 500 && attempt < MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, 1000 * attempt));
+          continue;
+        }
+        throw lastError;
+      }
+
+      // Check if the response indicates a failed payment (idempotency cache of a failed attempt)
+      const paymentData = data?.data || data;
+      const paymentStatus = paymentData?.status || data?.status;
+      
+      if (paymentStatus === "failed") {
+        console.warn(`[MeetPay] Payment returned status 'failed' - generating new idempotency key for retry`);
+        // Use a new idempotency key to force a fresh payment attempt
+        params.idempotencyKey = `${params.idempotencyKey}-retry-${attempt}`;
+        lastError = new Error("Payment failed on provider side");
+        if (attempt < MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, 1000 * attempt));
+          continue;
+        }
+        throw lastError;
+      }
+
+      console.log(`[MeetPay] Payment initiated successfully:`, JSON.stringify(data));
+      const id = paymentData?.id || data?.id || data?.payment_id || data?.transaction_id || "";
+      return { id, status: paymentStatus || "pending", payment_url: paymentData?.payment_url || data?.payment_url };
+    } catch (fetchErr: any) {
+      if (fetchErr === lastError) throw fetchErr;
+      console.error(`[MeetPay] Attempt ${attempt} - Network error:`, fetchErr.message);
+      lastError = fetchErr;
+      if (attempt < MAX_RETRIES) {
+        await new Promise(r => setTimeout(r, 1000 * attempt));
+        continue;
+      }
+      throw lastError;
+    }
   }
 
-  if (!res.ok) {
-    console.error(`[MeetPay] Payment initiation failed (${res.status}):`, JSON.stringify(data));
-    throw new Error(data?.message || data?.error || `MeetPay error: ${res.status}`);
-  }
-
-  console.log(`[MeetPay] Payment initiated successfully:`, JSON.stringify(data));
-  return { id: data.id || data.payment_id || data.transaction_id || "", status: data.status, payment_url: data.payment_url };
+  throw lastError || new Error("Payment initiation failed after retries");
 }
 
 serve(async (req) => {
