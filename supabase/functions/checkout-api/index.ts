@@ -168,7 +168,14 @@ async function initiateMeetPayPayment(params: {
     body: JSON.stringify(body),
   });
 
-  const data = await res.json();
+  const responseText = await res.text();
+  let data: any;
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    console.error(`[MeetPay] Non-JSON response (${res.status}):`, responseText.substring(0, 500));
+    throw new Error(`MeetPay returned non-JSON response (HTTP ${res.status})`);
+  }
 
   if (!res.ok) {
     console.error(`[MeetPay] Payment initiation failed (${res.status}):`, JSON.stringify(data));

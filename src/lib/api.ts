@@ -3,11 +3,8 @@
  * Delivery settings are fetched from this project's own checkout-api.
  */
 
-const API_BASE = 'https://ckklirhhwndijsjpmnfe.supabase.co/functions/v1';
-const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNra2xpcmhod25kaWpzanBtbmZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYzNDUzMDksImV4cCI6MjA2MTkyMTMwOX0.aNJkJVXNqzBicShLsFbIbYUS0bQHNBMxdbwcjJOavLM';
-
-const LOCAL_API_BASE = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
-const LOCAL_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const API_BASE = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
+const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}/checkout-api${path}`, {
@@ -88,13 +85,13 @@ function normalizeProduct(p: any): Product {
 
 export async function fetchDeliverySettings(): Promise<DeliverySettings> {
   try {
-    const url = `${LOCAL_API_BASE}/checkout-api/delivery-settings`;
+    const url = `${API_BASE}/checkout-api/delivery-settings`;
     if (import.meta.env.DEV) {
       console.log('[DEBUG] Fetching delivery settings from:', url);
     }
     const res = await fetch(url, {
       headers: {
-        'apikey': LOCAL_ANON_KEY,
+        'apikey': ANON_KEY,
         'Content-Type': 'application/json',
       },
     });
