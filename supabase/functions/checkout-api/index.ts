@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const MEETPAY_BASE_URL = "https://meet.briq.tz/api/v1";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -98,6 +100,83 @@ function calculateDeliveryFee(
   fee = Math.round(fee / 100) * 100;
 
   return { fee, blocked: false };
+}
+
+// --- MeetPay Payment Initiation ---
+
+/** Detect mobile money network from phone number prefix */
+function detectNetwork(phone: string): string {
+  // Tanzania network prefixes (after 255)
+  const prefix = phone.replace(/^255/, "").substring(0, 2);
+  const networkMap: Record<string, string> = {
+    "74": "VODACOM", "75": "VODACOM", "76": "VODACOM",
+    "65": "TIGO", "67": "TIGO", "71": "TIGO",
+    "68": "AIRTEL", "69": "AIRTEL", "78": "AIRTEL",
+    "62": "HALOTEL", "63": "HALOTEL",
+    "73": "TTCL",
+  };
+  return networkMap[prefix] || "VODACOM"; // Default to VODACOM
+}
+
+/** Initiate MeetPay mobile money payment */
+async function initiateMeetPayPayment(params: {
+  amount: number;
+  phone: string;
+  customerName: string;
+  orderId: string;
+  orderNumber: string;
+  idempotencyKey: string;
+}): Promise<{ id: string; status: string; payment_url?: string }> {
+  const apiKey = Deno.env.get("MEETPAY_API_KEY");
+  if (!apiKey) {
+    throw new Error("MEETPAY_API_KEY not configured");
+  }
+
+  const nameParts = params.customerName.trim().split(/\s+/);
+  const firstname = nameParts[0] || "Customer";
+  const lastname = nameParts.slice(1).join(" ") || "N/A";
+
+  const network = detectNetwork(params.phone);
+
+  const body = {
+    amount: params.amount,
+    currency: "TZS",
+    type: "mobile",
+    phone: params.phone,
+    network,
+    customer: {
+      firstname,
+      lastname,
+      email: `${params.phone}@checkout.afrilink.info`,
+    },
+    reference: params.orderNumber,
+    metadata: {
+      order_id: params.orderId,
+      order_number: params.orderNumber,
+    },
+  };
+
+  console.log(`[MeetPay] Initiating payment: ${JSON.stringify({ amount: body.amount, phone: body.phone, network, reference: body.reference })}`);
+
+  const res = await fetch(`${MEETPAY_BASE_URL}/payments`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "Idempotency-Key": params.idempotencyKey,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    console.error(`[MeetPay] Payment initiation failed (${res.status}):`, JSON.stringify(data));
+    throw new Error(data?.message || data?.error || `MeetPay error: ${res.status}`);
+  }
+
+  console.log(`[MeetPay] Payment initiated successfully:`, JSON.stringify(data));
+  return { id: data.id || data.payment_id || data.transaction_id || "", status: data.status, payment_url: data.payment_url };
 }
 
 serve(async (req) => {
@@ -317,14 +396,41 @@ serve(async (req) => {
         return json({ error: "Failed to create order" }, 500);
       }
 
-      return json({
-        order_id: order.id,
-        order_number: order.order_number,
-        subtotal: item_price,
-        distance_km,
-        delivery_fee,
-        total: total_amount,
-      }, 201);
+      // Initiate MeetPay payment
+      try {
+        const meetpayResult = await initiateMeetPayPayment({
+          amount: total_amount,
+          phone: customer_phone,
+          customerName: customer_name,
+          orderId: order.id,
+          orderNumber: order.order_number,
+          idempotencyKey: checkout_session_id,
+        });
+
+        return json({
+          order_id: order.id,
+          order_number: order.order_number,
+          subtotal: item_price,
+          distance_km,
+          delivery_fee,
+          total: total_amount,
+          payment_id: meetpayResult.id,
+          payment_status: meetpayResult.status,
+          payment_url: meetpayResult.payment_url || null,
+        }, 201);
+      } catch (payErr: any) {
+        console.error("MeetPay payment initiation failed:", payErr);
+        // Order is created but payment failed — mark order as failed
+        await admin
+          .from("orders")
+          .update({ payment_status: "failed", order_status: "cancelled" })
+          .eq("id", order.id);
+
+        return json({ 
+          error: `Payment initiation failed: ${payErr.message || "Unknown error"}`,
+          order_id: order.id,
+        }, 502);
+      }
     }
 
     // ---- POST /checkout/confirm ----

@@ -163,23 +163,33 @@ serve(async (req) => {
 
     const event = JSON.parse(rawBody);
     const eventType = event?.type ?? event?.event_type ?? "unknown";
-    console.log(`MeetPay webhook received: ${eventType}`);
+    console.log(`[MeetPay Webhook] Event received: ${eventType}`, JSON.stringify(event).substring(0, 500));
 
     const admin = getAdminClient();
 
-    // Extract reference — adapt field names to MeetPay's actual payload
-    const transactionId = event?.data?.transaction_id 
-      ?? event?.data?.provider_reference 
-      ?? event?.transaction_id
-      ?? event?.reference;
-    
-    const orderId = event?.data?.order_id 
-      ?? event?.data?.metadata?.order_id
-      ?? event?.metadata?.order_id;
+    // Extract order_id from MeetPay payload — check multiple possible locations
+    let orderId = event?.data?.metadata?.order_id
+      ?? event?.metadata?.order_id
+      ?? event?.data?.order_id;
+
+    // Fallback: look up by reference (order_number)
+    const reference = event?.data?.reference ?? event?.reference;
+    if (!orderId && reference) {
+      console.log(`[MeetPay Webhook] No order_id in payload, looking up by reference: ${reference}`);
+      const { data: orderByRef } = await admin
+        .from("orders")
+        .select("id")
+        .eq("order_number", reference)
+        .maybeSingle();
+      if (orderByRef) {
+        orderId = orderByRef.id;
+        console.log(`[MeetPay Webhook] Found order by reference: ${orderId}`);
+      }
+    }
 
     if (eventType === "payment.completed" || eventType === "payment.success") {
       if (!orderId) {
-        console.error("No order_id in webhook payload");
+        console.error("[MeetPay Webhook] No order_id resolved from payload:", JSON.stringify(event));
         return json({ error: "Missing order_id" }, 400);
       }
 
