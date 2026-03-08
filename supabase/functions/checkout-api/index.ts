@@ -176,6 +176,7 @@ async function initiateMeetPayPayment(params: {
 
   console.log(`[MeetPay] Payment initiated successfully: id=${data.id}, status=${data.status}`);
   return data;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
