@@ -42,12 +42,36 @@ export async function fetchProduct(idOrSlug: string): Promise<Product> {
 
 /** Map main-backend field names to our frontend Product type */
 function normalizeProduct(p: any): Product {
+  // Support multiple possible vendor location structures:
+  // 1. Flat: p.vendor_lat / p.vendor_lng / p.vendor_address
+  // 2. Nested object: p.vendor.lat / p.vendor.lng / p.vendor.address
+  // 3. Nested with prefix: p.vendor.vendor_lat / p.vendor.vendor_lng
+  const v = p.vendor ?? {};
+  const vendor_lat = p.vendor_lat ?? v.lat ?? v.vendor_lat ?? null;
+  const vendor_lng = p.vendor_lng ?? v.lng ?? v.vendor_lng ?? null;
+  const vendor_address = p.vendor_address ?? v.address ?? v.vendor_address ?? null;
+
+  // Coerce to number if string coordinates come through
+  const parsedLat = vendor_lat != null ? Number(vendor_lat) : null;
+  const parsedLng = vendor_lng != null ? Number(vendor_lng) : null;
+  const validLat = parsedLat != null && !isNaN(parsedLat) ? parsedLat : null;
+  const validLng = parsedLng != null && !isNaN(parsedLng) ? parsedLng : null;
+
+  if (import.meta.env.DEV) {
+    console.log('[DEBUG] normalizeProduct vendor location:', {
+      raw_vendor_lat: p.vendor_lat,
+      raw_vendor_lng: p.vendor_lng,
+      nested_vendor: p.vendor,
+      resolved: { vendor_lat: validLat, vendor_lng: validLng, vendor_address },
+    });
+  }
+
   return {
     id: p.id,
     vendor_id: p.vendor_id ?? '',
-    vendor_lat: p.vendor_lat ?? null,
-    vendor_lng: p.vendor_lng ?? null,
-    vendor_address: p.vendor_address ?? null,
+    vendor_lat: validLat,
+    vendor_lng: validLng,
+    vendor_address,
     slug: p.slug ?? '',
     name: p.title ?? p.name ?? '',
     price: p.price ?? 0,
