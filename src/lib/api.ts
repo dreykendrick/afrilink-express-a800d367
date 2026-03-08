@@ -85,13 +85,13 @@ function normalizeProduct(p: any): Product {
 
 export async function fetchDeliverySettings(): Promise<DeliverySettings> {
   try {
-    const url = `${LOCAL_API_BASE}/checkout-api/delivery-settings`;
+    const url = `${API_BASE}/checkout-api/delivery-settings`;
     if (import.meta.env.DEV) {
       console.log('[DEBUG] Fetching delivery settings from:', url);
     }
     const res = await fetch(url, {
       headers: {
-        'apikey': LOCAL_ANON_KEY,
+        'apikey': ANON_KEY,
         'Content-Type': 'application/json',
       },
     });
