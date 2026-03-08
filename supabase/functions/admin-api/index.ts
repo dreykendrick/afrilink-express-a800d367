@@ -782,16 +782,7 @@ serve(async (req) => {
         return json({ error: "Failed to create withdrawal" }, 500);
       }
 
-      // FIX: Atomic balance deduction using RPC-like pattern
-      // Re-check balance with row lock to prevent race conditions
-      const { data: lockedWallet, error: lockErr } = await admin.rpc(
-        // Since we can't use FOR UPDATE via the JS client easily,
-        // we do a conditional update that only succeeds if balance >= amount
-        'credit_wallets_for_order', // We'll use a direct update with a WHERE clause instead
-        { p_order_id: '00000000-0000-0000-0000-000000000000' } // dummy, we won't actually use this
-      ).then(() => null).catch(() => null) as any;
-
-      // Use conditional update: only deduct if balance still >= amount
+      // FIX: Atomic balance deduction — conditional update prevents race conditions
       const { data: deductResult, error: deductErr } = await admin
         .from("wallets")
         .update({
@@ -799,7 +790,7 @@ serve(async (req) => {
           total_withdrawn: Number(wallet.total_withdrawn || 0) + amount,
         })
         .eq("id", wallet.id)
-        .gte("balance", amount) // Race condition guard: only update if balance still sufficient
+        .gte("balance", amount) // Only update if balance still sufficient
         .select("id")
         .maybeSingle();
 
