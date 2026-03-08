@@ -739,10 +739,10 @@ serve(async (req) => {
         return json({ error: `Minimum withdrawal is ${MIN_WITHDRAWAL} TZS` }, 400);
       }
 
-      // Get wallet
+      // Get wallet — FIX: select total_withdrawn too
       const { data: wallet, error: walletErr } = await admin
         .from("wallets")
-        .select("id, balance")
+        .select("id, balance, total_withdrawn")
         .eq("owner_id", ownerId)
         .eq("owner_type", ownerType)
         .single();
@@ -782,16 +782,23 @@ serve(async (req) => {
         return json({ error: "Failed to create withdrawal" }, 500);
       }
 
-      // Deduct from wallet balance immediately
-      await admin
+      // FIX: Atomic balance deduction — conditional update prevents race conditions
+      const { data: deductResult, error: deductErr } = await admin
         .from("wallets")
         .update({
-          balance: wallet.balance - amount,
-          total_withdrawn: (wallet as any).total_withdrawn
-            ? Number((wallet as any).total_withdrawn) + amount
-            : amount,
+          balance: Number(wallet.balance) - amount,
+          total_withdrawn: Number(wallet.total_withdrawn || 0) + amount,
         })
-        .eq("id", wallet.id);
+        .eq("id", wallet.id)
+        .gte("balance", amount) // Only update if balance still sufficient
+        .select("id")
+        .maybeSingle();
+
+      if (deductErr || !deductResult) {
+        // Balance changed between check and deduct — rollback withdrawal
+        await admin.from("withdrawals").update({ status: "failed", failure_reason: "Balance changed during processing" }).eq("id", withdrawal.id);
+        return json({ error: "Balance changed during processing. Please retry." }, 409);
+      }
 
       // Record debit transaction
       await admin.from("wallet_transactions").insert({

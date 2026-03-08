@@ -31,10 +31,11 @@ export function normalizePhone(phone: string): string {
 }
 
 // Validate Tanzania phone number
+// FIX: Accept all valid TZ prefixes: 6x, 7x (covers Vodacom, Tigo, Airtel, Halotel, TTCL)
 export function isValidTanzaniaPhone(phone: string): boolean {
   const normalized = normalizePhone(phone);
-  // Tanzania numbers: 255 followed by 9 digits (total 12 digits)
-  return /^255[67]\d{8}$/.test(normalized);
+  // Tanzania numbers: 255 followed by 9 digits starting with 6 or 7
+  return /^255[6-7]\d{8}$/.test(normalized);
 }
 
 // Format phone for display

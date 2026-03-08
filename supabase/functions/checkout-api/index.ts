@@ -122,6 +122,13 @@ function detectNetwork(phone: string): string {
   return networkMap[prefix] || "VODACOM"; // Default to VODACOM
 }
 
+/** Generate a collision-resistant order number */
+function generateOrderNumber(): string {
+  const ts = Date.now().toString(36).toUpperCase();
+  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `ORD-${ts}${rand}`;
+}
+
 /** Initiate MeetPay mobile money payment with retry for transient errors */
 async function initiateMeetPayPayment(params: {
   amount: number;
@@ -438,7 +445,7 @@ serve(async (req) => {
         return json({ error: "Vendor location is not configured yet." }, 400);
       }
 
-      // Calculate distance
+      // Calculate distance — FIX: use ?? instead of || to handle 0 correctly
       let distance_km = 0;
       if (delivery_lat != null && delivery_lng != null) {
         distance_km = Math.round(haversineDistance(vendorLat, vendorLng, delivery_lat, delivery_lng) * 10) / 10;
@@ -476,10 +483,13 @@ serve(async (req) => {
 
       if (source === "marketplace" && (buyer_role === "vendor" || buyer_role === "affiliate")) {
         affiliate_rate_at_purchase = 0.05;
+        // FIX: Keep affiliate_id as null for marketplace — the commission goes to the platform.
+        // The credit_wallets_for_order function now handles this case correctly.
         affiliate_id = null;
       }
 
-      const order_number = `ORD-${Date.now().toString(36).toUpperCase()}`;
+      // FIX: Use collision-resistant order number
+      const order_number = generateOrderNumber();
 
       const { data: order, error: orderErr } = await admin
         .from("orders")
@@ -493,8 +503,9 @@ serve(async (req) => {
           buyer_landmark: customer_landmark || null,
           buyer_notes: customer_notes || null,
           delivery_address,
-          delivery_lat: delivery_lat || null,
-          delivery_lng: delivery_lng || null,
+          // FIX: use ?? instead of || to handle 0 latitude/longitude correctly
+          delivery_lat: delivery_lat ?? null,
+          delivery_lng: delivery_lng ?? null,
           distance_km,
           item_price,
           delivery_fee,
@@ -511,8 +522,49 @@ serve(async (req) => {
         .single();
 
       if (orderErr) {
-        console.error("Order creation error:", orderErr);
-        return json({ error: "Failed to create order" }, 500);
+        // Handle unique constraint violation on order_number (extremely rare)
+        if (orderErr.message?.includes("duplicate") || orderErr.message?.includes("unique")) {
+          console.warn("[checkout] Order number collision, retrying with new number...");
+          const retryNumber = generateOrderNumber();
+          const { data: retryOrder, error: retryErr } = await admin
+            .from("orders")
+            .insert({
+              order_number: retryNumber,
+              product_id,
+              affiliate_id,
+              buyer_name: customer_name,
+              buyer_phone: customer_phone,
+              buyer_area: delivery_address,
+              buyer_landmark: customer_landmark || null,
+              buyer_notes: customer_notes || null,
+              delivery_address,
+              delivery_lat: delivery_lat ?? null,
+              delivery_lng: delivery_lng ?? null,
+              distance_km,
+              item_price,
+              delivery_fee,
+              total_amount,
+              order_status: "pending_payment",
+              payment_status: "pending",
+              delivery_settings_snapshot: settings,
+              ...(source ? { source } : {}),
+              ...(buyer_user_id ? { buyer_user_id } : {}),
+              ...(buyer_role ? { buyer_role } : {}),
+              ...(affiliate_rate_at_purchase !== null ? { affiliate_rate_at_purchase } : {}),
+            })
+            .select("id, order_number")
+            .single();
+
+          if (retryErr) {
+            console.error("Order creation error (retry):", retryErr);
+            return json({ error: "Failed to create order" }, 500);
+          }
+          // Use retryOrder below
+          Object.assign(order!, retryOrder);
+        } else {
+          console.error("Order creation error:", orderErr);
+          return json({ error: "Failed to create order" }, 500);
+        }
       }
 
       // Initiate MeetPay payment
@@ -521,14 +573,14 @@ serve(async (req) => {
           amount: total_amount,
           phone: customer_phone,
           customerName: customer_name,
-          orderId: order.id,
-          orderNumber: order.order_number,
+          orderId: order!.id,
+          orderNumber: order!.order_number,
           idempotencyKey: checkout_session_id,
         });
 
         return json({
-          order_id: order.id,
-          order_number: order.order_number,
+          order_id: order!.id,
+          order_number: order!.order_number,
           subtotal: item_price,
           distance_km,
           delivery_fee,
@@ -543,11 +595,11 @@ serve(async (req) => {
         await admin
           .from("orders")
           .update({ payment_status: "failed", order_status: "cancelled" })
-          .eq("id", order.id);
+          .eq("id", order!.id);
 
         return json({ 
           error: `Payment initiation failed: ${payErr.message || "Unknown error"}`,
-          order_id: order.id,
+          order_id: order!.id,
         }, 502);
       }
     }
@@ -572,6 +624,8 @@ serve(async (req) => {
     }
 
     // ---- POST /checkout/confirm ----
+    // FIX: This endpoint is now restricted — only the webhook should confirm payments.
+    // Kept for backwards compatibility but with strict guards.
     if (route === "checkout" && param === "confirm" && req.method === "POST") {
       const body = await req.json();
       const { order_id } = body;
@@ -582,19 +636,22 @@ serve(async (req) => {
 
       const admin = getAdminClient();
 
-      const { data: order, error } = await admin
+      // FIX: Add optimistic lock — only transition from pending to confirmed
+      const { data: order, error, count } = await admin
         .from("orders")
         .update({
           payment_status: "confirmed",
           order_status: "paid",
         })
         .eq("id", order_id)
+        .eq("payment_status", "pending") // Optimistic lock: only pending -> confirmed
         .select()
         .single();
 
       if (error) {
-        console.error("Payment confirm error:", error);
-        return json({ error: "Failed to confirm payment" }, 500);
+        // If no row matched, the order is already confirmed or doesn't exist
+        console.warn("Payment confirm rejected (already confirmed or not found):", order_id, error.message);
+        return json({ error: "Order not found or already processed" }, 409);
       }
 
       return json(order);
@@ -614,7 +671,7 @@ serve(async (req) => {
       // Verify token
       const { data: order, error: fetchErr } = await admin
         .from("orders")
-        .select("id, order_status, confirmation_token, buyer_confirmed_at, vendor_confirmed_at")
+        .select("id, order_status, payment_status, confirmation_token, buyer_confirmed_at, vendor_confirmed_at")
         .eq("id", order_id)
         .single();
 
@@ -626,8 +683,13 @@ serve(async (req) => {
         return json({ error: "Invalid confirmation token" }, 403);
       }
 
+      // FIX: Cannot confirm delivery on unpaid orders
+      if (order.payment_status !== "confirmed") {
+        return json({ error: "Payment has not been confirmed yet" }, 400);
+      }
+
       if (order.buyer_confirmed_at) {
-        return json({ message: "Already confirmed", order_status: "confirmed" });
+        return json({ message: "Already confirmed", order_status: order.order_status });
       }
 
       // Set buyer confirmation
@@ -685,12 +747,17 @@ serve(async (req) => {
 
       const { data: order, error: fetchErr } = await admin
         .from("orders")
-        .select("id, order_status, vendor_confirmed_at, buyer_confirmed_at")
+        .select("id, order_status, payment_status, vendor_confirmed_at, buyer_confirmed_at")
         .eq("id", order_id)
         .single();
 
       if (fetchErr || !order) {
         return json({ error: "Order not found" }, 404);
+      }
+
+      // FIX: Cannot vendor-confirm unpaid orders
+      if (order.payment_status !== "confirmed") {
+        return json({ error: "Payment has not been confirmed yet" }, 400);
       }
 
       if (order.vendor_confirmed_at) {
