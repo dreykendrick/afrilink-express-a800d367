@@ -739,10 +739,10 @@ serve(async (req) => {
         return json({ error: `Minimum withdrawal is ${MIN_WITHDRAWAL} TZS` }, 400);
       }
 
-      // Get wallet
+      // Get wallet — FIX: select total_withdrawn too
       const { data: wallet, error: walletErr } = await admin
         .from("wallets")
-        .select("id, balance")
+        .select("id, balance, total_withdrawn")
         .eq("owner_id", ownerId)
         .eq("owner_type", ownerType)
         .single();
