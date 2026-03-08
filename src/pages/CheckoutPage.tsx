@@ -119,6 +119,7 @@ export default function CheckoutPage() {
         totalAmount={totalAmount}
         isWithinRange={deliveryEstimate.is_within_range}
         onSuccess={handleOrderSuccess}
+        source={orderSource}
       />
     </div>
   );
