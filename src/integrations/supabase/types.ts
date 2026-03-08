@@ -280,6 +280,7 @@ export type Database = {
           affiliate_rate_at_purchase: number | null
           buyer_area: string
           buyer_city_id: string | null
+          buyer_confirmed_at: string | null
           buyer_landmark: string | null
           buyer_name: string
           buyer_notes: string | null
@@ -305,6 +306,7 @@ export type Database = {
           source: string | null
           total_amount: number
           updated_at: string
+          vendor_confirmed_at: string | null
           vendor_notified_at: string | null
         }
         Insert: {
@@ -312,6 +314,7 @@ export type Database = {
           affiliate_rate_at_purchase?: number | null
           buyer_area: string
           buyer_city_id?: string | null
+          buyer_confirmed_at?: string | null
           buyer_landmark?: string | null
           buyer_name: string
           buyer_notes?: string | null
@@ -337,6 +340,7 @@ export type Database = {
           source?: string | null
           total_amount: number
           updated_at?: string
+          vendor_confirmed_at?: string | null
           vendor_notified_at?: string | null
         }
         Update: {
@@ -344,6 +348,7 @@ export type Database = {
           affiliate_rate_at_purchase?: number | null
           buyer_area?: string
           buyer_city_id?: string | null
+          buyer_confirmed_at?: string | null
           buyer_landmark?: string | null
           buyer_name?: string
           buyer_notes?: string | null
@@ -369,6 +374,7 @@ export type Database = {
           source?: string | null
           total_amount?: number
           updated_at?: string
+          vendor_confirmed_at?: string | null
           vendor_notified_at?: string | null
         }
         Relationships: [
@@ -640,12 +646,165 @@ export type Database = {
           },
         ]
       }
+      wallet_transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string | null
+          id: string
+          order_id: string | null
+          type: string
+          wallet_id: string
+          withdrawal_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          order_id?: string | null
+          type: string
+          wallet_id: string
+          withdrawal_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          order_id?: string | null
+          type?: string
+          wallet_id?: string
+          withdrawal_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_transactions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_transactions_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_transactions_withdrawal_id_fkey"
+            columns: ["withdrawal_id"]
+            isOneToOne: false
+            referencedRelation: "withdrawals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallets: {
+        Row: {
+          balance: number
+          created_at: string
+          currency: string
+          id: string
+          owner_id: string
+          owner_type: string
+          total_earned: number
+          total_withdrawn: number
+          updated_at: string
+        }
+        Insert: {
+          balance?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          owner_id: string
+          owner_type: string
+          total_earned?: number
+          total_withdrawn?: number
+          updated_at?: string
+        }
+        Update: {
+          balance?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          owner_id?: string
+          owner_type?: string
+          total_earned?: number
+          total_withdrawn?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      withdrawals: {
+        Row: {
+          amount: number
+          created_at: string
+          failure_reason: string | null
+          fee: number
+          id: string
+          method: string
+          net_amount: number
+          owner_id: string
+          owner_type: string
+          phone_number: string
+          processed_at: string | null
+          provider_reference: string | null
+          status: string
+          updated_at: string
+          wallet_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          failure_reason?: string | null
+          fee?: number
+          id?: string
+          method?: string
+          net_amount: number
+          owner_id: string
+          owner_type: string
+          phone_number: string
+          processed_at?: string | null
+          provider_reference?: string | null
+          status?: string
+          updated_at?: string
+          wallet_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          failure_reason?: string | null
+          fee?: number
+          id?: string
+          method?: string
+          net_amount?: number
+          owner_id?: string
+          owner_type?: string
+          phone_number?: string
+          processed_at?: string | null
+          provider_reference?: string | null
+          status?: string
+          updated_at?: string
+          wallet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "withdrawals_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      credit_wallets_for_order: { Args: { p_order_id: string }; Returns: Json }
     }
     Enums: {
       [_ in never]: never
