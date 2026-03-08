@@ -310,20 +310,35 @@ serve(async (req) => {
 
       const admin = getAdminClient();
 
-      // Look up product + vendor coordinates
-      const { data: product, error: prodErr } = await admin
+      // Look up product + vendor coordinates (local DB first, then external)
+      let product: any = null;
+      const { data: localProduct, error: prodErr } = await admin
         .from("products")
         .select("id, price, vendor_id, vendor:vendors(lat, lng, address)")
         .eq("id", product_id)
         .eq("is_active", true)
         .maybeSingle();
 
-      if (prodErr || !product) {
-        return json({ error: "Product not found" }, 404);
+      if (localProduct) {
+        product = localProduct;
+      } else {
+        // Fallback: fetch from external backend
+        console.log("[checkout] Product not found locally, trying external DB...");
+        const extClient = createClient(EXTERNAL_SUPABASE_URL, EXTERNAL_ANON_KEY);
+        const { data: extProduct, error: extErr } = await extClient
+          .from("products")
+          .select("id, price, vendor_id, vendor:vendors(lat, lng, address)")
+          .eq("id", product_id)
+          .eq("is_active", true)
+          .maybeSingle();
+        if (extErr || !extProduct) {
+          return json({ error: "Product not found" }, 404);
+        }
+        product = extProduct;
       }
 
-      const vendorLat = (product as any).vendor?.lat ?? null;
-      const vendorLng = (product as any).vendor?.lng ?? null;
+      const vendorLat = product.vendor?.lat ?? null;
+      const vendorLng = product.vendor?.lng ?? null;
 
       // Vendor location is required
       if (vendorLat == null || vendorLng == null) {
