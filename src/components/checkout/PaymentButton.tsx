@@ -81,9 +81,12 @@ export function PaymentButton({
         return;
       }
 
-      await confirmCheckoutPayment(result.order_id);
-
-      toast({ title: 'Payment successful!', description: 'Your order has been placed.' });
+      // For mobile money STK push: payment was initiated successfully
+      // The user will receive a push notification on their phone to confirm
+      toast({
+        title: 'Payment request sent!',
+        description: 'Please check your phone and confirm the mobile money payment.',
+      });
       onSuccess(result.order_id);
     } catch (err: any) {
       console.error('Payment error:', err);
