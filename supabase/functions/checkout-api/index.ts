@@ -552,6 +552,25 @@ serve(async (req) => {
       }
     }
 
+    // ---- GET /receipt/:orderId ----
+    if (route === "receipt" && param && req.method === "GET") {
+      const admin = getAdminClient();
+      const { data: order, error } = await admin
+        .from("orders")
+        .select("*, product:products(name, images, slug)")
+        .eq("id", param)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Receipt lookup error:", error);
+        return json({ error: "Unable to load order" }, 500);
+      }
+      if (!order) {
+        return json({ error: "Order not found" }, 404);
+      }
+      return json(order);
+    }
+
     // ---- POST /checkout/confirm ----
     if (route === "checkout" && param === "confirm" && req.method === "POST") {
       const body = await req.json();
