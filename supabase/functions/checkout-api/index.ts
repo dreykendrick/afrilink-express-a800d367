@@ -102,6 +102,81 @@ function calculateDeliveryFee(
   return { fee, blocked: false };
 }
 
+// --- MeetPay Payment Initiation ---
+
+/** Detect mobile money network from phone number prefix */
+function detectNetwork(phone: string): string {
+  // Tanzania network prefixes (after 255)
+  const prefix = phone.replace(/^255/, "").substring(0, 2);
+  const networkMap: Record<string, string> = {
+    "74": "VODACOM", "75": "VODACOM", "76": "VODACOM",
+    "65": "TIGO", "67": "TIGO", "71": "TIGO",
+    "68": "AIRTEL", "69": "AIRTEL", "78": "AIRTEL",
+    "62": "HALOTEL", "63": "HALOTEL",
+    "73": "TTCL",
+  };
+  return networkMap[prefix] || "VODACOM"; // Default to VODACOM
+}
+
+/** Initiate MeetPay mobile money payment */
+async function initiateMeetPayPayment(params: {
+  amount: number;
+  phone: string;
+  customerName: string;
+  orderId: string;
+  orderNumber: string;
+  idempotencyKey: string;
+}): Promise<{ id: string; status: string; payment_url?: string }> {
+  const apiKey = Deno.env.get("MEETPAY_API_KEY");
+  if (!apiKey) {
+    throw new Error("MEETPAY_API_KEY not configured");
+  }
+
+  const nameParts = params.customerName.trim().split(/\s+/);
+  const firstname = nameParts[0] || "Customer";
+  const lastname = nameParts.slice(1).join(" ") || "N/A";
+
+  const network = detectNetwork(params.phone);
+
+  const body = {
+    amount: params.amount,
+    currency: "TZS",
+    type: "mobile",
+    phone: params.phone,
+    network,
+    customer: {
+      firstname,
+      lastname,
+    },
+    reference: params.orderNumber,
+    metadata: {
+      order_id: params.orderId,
+      order_number: params.orderNumber,
+    },
+  };
+
+  console.log(`[MeetPay] Initiating payment: ${JSON.stringify({ amount: body.amount, phone: body.phone, network, reference: body.reference })}`);
+
+  const res = await fetch(`${MEETPAY_BASE_URL}/payments`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "Idempotency-Key": params.idempotencyKey,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    console.error(`[MeetPay] Payment initiation failed (${res.status}):`, JSON.stringify(data));
+    throw new Error(data?.message || data?.error || `MeetPay error: ${res.status}`);
+  }
+
+  console.log(`[MeetPay] Payment initiated successfully: id=${data.id}, status=${data.status}`);
+  return data;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
