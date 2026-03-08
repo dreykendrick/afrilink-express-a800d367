@@ -44,6 +44,12 @@ export function calculateDeliveryEstimate(
   settings: DeliverySettings,
   subtotal: number = 0,
 ): DeliveryEstimate {
+  if (import.meta.env.DEV) {
+    console.log('[DEBUG] calculateDeliveryEstimate inputs:', {
+      vendorLat, vendorLng, buyerLat, buyerLng,
+      settings, subtotal,
+    });
+  }
   if (!settings.enabled) {
     return { distance_km: 0, delivery_fee: 0, is_within_range: true };
   }
