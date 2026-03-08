@@ -175,8 +175,8 @@ async function initiateMeetPayPayment(params: {
     throw new Error(data?.message || data?.error || `MeetPay error: ${res.status}`);
   }
 
-  console.log(`[MeetPay] Payment initiated successfully: id=${data.id}, status=${data.status}`);
-  return data;
+  console.log(`[MeetPay] Payment initiated successfully:`, JSON.stringify(data));
+  return { id: data.id || data.payment_id || data.transaction_id || "", status: data.status, payment_url: data.payment_url };
 }
 
 serve(async (req) => {
