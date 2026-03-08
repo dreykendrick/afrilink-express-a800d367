@@ -147,6 +147,7 @@ async function initiateMeetPayPayment(params: {
     customer: {
       firstname,
       lastname,
+      email: `${params.phone}@checkout.afrilink.info`,
     },
     reference: params.orderNumber,
     metadata: {
