@@ -88,16 +88,24 @@ function normalizeProduct(p: any): Product {
 
 export async function fetchDeliverySettings(): Promise<DeliverySettings> {
   try {
-    const res = await fetch(`${LOCAL_API_BASE}/checkout-api/delivery-settings`, {
+    const url = `${LOCAL_API_BASE}/checkout-api/delivery-settings`;
+    if (import.meta.env.DEV) {
+      console.log('[DEBUG] Fetching delivery settings from:', url);
+    }
+    const res = await fetch(url, {
       headers: {
         'apikey': LOCAL_ANON_KEY,
         'Content-Type': 'application/json',
       },
     });
-    if (!res.ok) throw new Error('Failed to load delivery settings');
-    return res.json();
+    if (!res.ok) throw new Error(`Failed to load delivery settings: ${res.status}`);
+    const settings = await res.json();
+    if (import.meta.env.DEV) {
+      console.log('[DEBUG] Delivery settings loaded from DB:', settings);
+    }
+    return settings;
   } catch (err) {
-    console.warn('Using default delivery settings:', err);
+    console.warn('[WARN] Using default delivery settings (fetch failed):', err);
     return DEFAULT_DELIVERY_SETTINGS;
   }
 }
