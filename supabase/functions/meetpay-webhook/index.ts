@@ -140,6 +140,33 @@ async function generateLedgerEntries(admin: ReturnType<typeof getAdminClient>, o
   }
 }
 
+/** Trigger vendor notification after successful payment */
+async function triggerVendorNotification(orderId: string) {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    
+    const res = await fetch(`${supabaseUrl}/functions/v1/notify-vendor`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ orderId }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`[Webhook] Vendor notification failed (${res.status}):`, body);
+    } else {
+      console.log(`[Webhook] Vendor notification triggered for order ${orderId}`);
+    }
+  } catch (err) {
+    console.error("[Webhook] Vendor notification error:", err);
+    // Non-blocking: don't fail the webhook if notification fails
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -230,7 +257,10 @@ serve(async (req) => {
       // Generate ledger entries (idempotent internally)
       await generateLedgerEntries(admin, orderId);
 
-      console.log(`Order ${orderId} marked as paid, ledger generated`);
+      // FIX: Trigger vendor notification after successful payment
+      await triggerVendorNotification(orderId);
+
+      console.log(`Order ${orderId} marked as paid, ledger generated, vendor notified`);
       return json({ ok: true });
     }
 
@@ -239,15 +269,22 @@ serve(async (req) => {
         return json({ error: "Missing order_id" }, 400);
       }
 
-      await admin
+      // FIX: Only transition from pending to failed — never overwrite confirmed
+      const { error: updateErr } = await admin
         .from("orders")
         .update({
           payment_status: "failed",
           order_status: "failed",
         })
-        .eq("id", orderId);
+        .eq("id", orderId)
+        .eq("payment_status", "pending"); // Optimistic lock: only pending -> failed
 
-      console.log(`Order ${orderId} marked as failed`);
+      if (updateErr) {
+        console.warn(`[Webhook] Failed to mark order ${orderId} as failed (may already be confirmed):`, updateErr.message);
+      } else {
+        console.log(`Order ${orderId} marked as failed`);
+      }
+
       return json({ ok: true });
     }
 
