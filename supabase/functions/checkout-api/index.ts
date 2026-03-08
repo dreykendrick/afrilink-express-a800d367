@@ -3,6 +3,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const MEETPAY_BASE_URL = "https://meet.briq.tz/api/v1";
 
+// External (main) backend for product lookups
+const EXTERNAL_SUPABASE_URL = "https://ckklirhhwndijsjpmnfe.supabase.co";
+const EXTERNAL_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNra2xpcmhod25kaWpzanBtbmZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYzNDUzMDksImV4cCI6MjA2MTkyMTMwOX0.aNJkJVXNqzBicShLsFbIbYUS0bQHNBMxdbwcjJOavLM";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -306,20 +310,82 @@ serve(async (req) => {
 
       const admin = getAdminClient();
 
-      // Look up product + vendor coordinates
-      const { data: product, error: prodErr } = await admin
+      // Look up product + vendor coordinates (local DB first, then external)
+      let product: any = null;
+      const { data: localProduct, error: prodErr } = await admin
         .from("products")
         .select("id, price, vendor_id, vendor:vendors(lat, lng, address)")
         .eq("id", product_id)
         .eq("is_active", true)
         .maybeSingle();
 
-      if (prodErr || !product) {
-        return json({ error: "Product not found" }, 404);
+      if (localProduct) {
+        product = localProduct;
+      } else {
+        // Fallback: fetch from external backend via its checkout-api edge function
+        console.log("[checkout] Product not found locally, trying external API...");
+        try {
+          const extRes = await fetch(`${EXTERNAL_SUPABASE_URL}/functions/v1/checkout-api/products/${product_id}`, {
+            headers: {
+              "apikey": EXTERNAL_ANON_KEY,
+              "Content-Type": "application/json",
+            },
+          });
+          if (!extRes.ok) {
+            console.error(`[checkout] External product lookup failed: ${extRes.status}`);
+            return json({ error: "Product not found" }, 404);
+          }
+          const extRaw = await extRes.json();
+          // External API may wrap in {success, product} or return flat
+          const extProduct = extRaw?.product ?? extRaw;
+          product = {
+            id: extProduct.id,
+            price: extProduct.price,
+            vendor_id: extProduct.vendor_id,
+            vendor: {
+              lat: extProduct.vendor_lat ?? null,
+              lng: extProduct.vendor_lng ?? null,
+              address: extProduct.vendor_address ?? null,
+            },
+          };
+          console.log("[checkout] External product resolved:", JSON.stringify({ id: product.id, price: product.price, vendor: product.vendor }));
+
+          // Sync vendor + product to local DB so FK constraint is satisfied
+          const vendorId = extProduct.vendor_id || product.vendor_id || product.id;
+          const vendorName = extProduct.vendor_name || "External Vendor";
+          const vendorPhone = "0000000000";
+          
+          // Upsert vendor
+          await admin.from("vendors").upsert({
+            id: vendorId,
+            name: vendorName,
+            phone: vendorPhone,
+            lat: product.vendor.lat,
+            lng: product.vendor.lng,
+            address: product.vendor.address,
+          }, { onConflict: "id" });
+
+          // Upsert product
+          await admin.from("products").upsert({
+            id: product.id,
+            vendor_id: vendorId,
+            name: extProduct.title || extProduct.name || "External Product",
+            slug: extProduct.slug || product.id,
+            price: product.price,
+            description: extProduct.description || null,
+            images: extProduct.image_urls || (extProduct.image_url ? [extProduct.image_url] : []),
+            is_active: true,
+          }, { onConflict: "id" });
+
+          console.log("[checkout] Synced external product + vendor to local DB");
+        } catch (extErr) {
+          console.error("[checkout] External product fetch error:", extErr);
+          return json({ error: "Product not found" }, 404);
+        }
       }
 
-      const vendorLat = (product as any).vendor?.lat ?? null;
-      const vendorLng = (product as any).vendor?.lng ?? null;
+      const vendorLat = product.vendor?.lat ?? null;
+      const vendorLng = product.vendor?.lng ?? null;
 
       // Vendor location is required
       if (vendorLat == null || vendorLng == null) {
