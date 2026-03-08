@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { CreditCard, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { createCheckout, confirmCheckoutPayment } from '@/lib/api';
+import { createCheckout } from '@/lib/api';
 import { formatPrice, normalizePhone, isValidTanzaniaPhone, generateIdempotencyKey } from '@/lib/format';
 import type { Product, BuyerInfo, CheckoutSource, BuyerRole } from '@/lib/types';
 
