@@ -322,19 +322,34 @@ serve(async (req) => {
       if (localProduct) {
         product = localProduct;
       } else {
-        // Fallback: fetch from external backend
-        console.log("[checkout] Product not found locally, trying external DB...");
-        const extClient = createClient(EXTERNAL_SUPABASE_URL, EXTERNAL_ANON_KEY);
-        const { data: extProduct, error: extErr } = await extClient
-          .from("products")
-          .select("id, price, vendor_id, vendor:vendors(lat, lng, address)")
-          .eq("id", product_id)
-          .eq("is_active", true)
-          .maybeSingle();
-        if (extErr || !extProduct) {
+        // Fallback: fetch from external backend via its checkout-api edge function
+        console.log("[checkout] Product not found locally, trying external API...");
+        try {
+          const extRes = await fetch(`${EXTERNAL_SUPABASE_URL}/functions/v1/checkout-api/products/${product_id}`, {
+            headers: {
+              "apikey": EXTERNAL_ANON_KEY,
+              "Content-Type": "application/json",
+            },
+          });
+          if (!extRes.ok) {
+            console.error(`[checkout] External product lookup failed: ${extRes.status}`);
+            return json({ error: "Product not found" }, 404);
+          }
+          const extProduct = await extRes.json();
+          product = {
+            id: extProduct.id,
+            price: extProduct.price,
+            vendor_id: extProduct.vendor_id,
+            vendor: {
+              lat: extProduct.vendor_lat ?? null,
+              lng: extProduct.vendor_lng ?? null,
+              address: extProduct.vendor_address ?? null,
+            },
+          };
+        } catch (extErr) {
+          console.error("[checkout] External product fetch error:", extErr);
           return json({ error: "Product not found" }, 404);
         }
-        product = extProduct;
       }
 
       const vendorLat = product.vendor?.lat ?? null;
