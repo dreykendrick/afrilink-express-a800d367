@@ -95,5 +95,11 @@ export function calculateDeliveryEstimate(
   // Round to nearest 100
   fee = Math.round(fee / 100) * 100;
 
+  if (import.meta.env.DEV) {
+    console.log('[DEBUG] calculateDeliveryEstimate result:', {
+      distance_km, delivery_fee: fee, formula: `${settings.base_fee} + (${distance_km} * ${settings.price_per_km}) = ${settings.base_fee + distance_km * settings.price_per_km}, after min/max: ${fee}`,
+    });
+  }
+
   return { distance_km, delivery_fee: fee, is_within_range: true };
 }
