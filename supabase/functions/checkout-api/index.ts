@@ -600,6 +600,167 @@ serve(async (req) => {
       return json(order);
     }
 
+    // ---- POST /confirm-delivery ----
+    if (route === "confirm-delivery" && req.method === "POST") {
+      const body = await req.json();
+      const { order_id, token } = body;
+
+      if (!order_id || !token) {
+        return json({ error: "Missing order_id or token" }, 400);
+      }
+
+      const admin = getAdminClient();
+
+      // Verify token
+      const { data: order, error: fetchErr } = await admin
+        .from("orders")
+        .select("id, order_status, confirmation_token, buyer_confirmed_at, vendor_confirmed_at")
+        .eq("id", order_id)
+        .single();
+
+      if (fetchErr || !order) {
+        return json({ error: "Order not found" }, 404);
+      }
+
+      if (order.confirmation_token !== token) {
+        return json({ error: "Invalid confirmation token" }, 403);
+      }
+
+      if (order.buyer_confirmed_at) {
+        return json({ message: "Already confirmed", order_status: "confirmed" });
+      }
+
+      // Set buyer confirmation
+      const updateData: Record<string, unknown> = {
+        buyer_confirmed_at: new Date().toISOString(),
+      };
+
+      // If vendor also confirmed, mark as fully confirmed
+      if (order.vendor_confirmed_at) {
+        updateData.order_status = "confirmed";
+        updateData.confirmed_at = new Date().toISOString();
+      }
+
+      const { data: updated, error: updateErr } = await admin
+        .from("orders")
+        .update(updateData)
+        .eq("id", order_id)
+        .select("*, product:products(name, images, slug)")
+        .single();
+
+      if (updateErr) {
+        console.error("Confirm delivery error:", updateErr);
+        return json({ error: "Failed to confirm delivery" }, 500);
+      }
+
+      // If both confirmed, credit wallets (no external payout)
+      if (updated.vendor_confirmed_at && updated.buyer_confirmed_at) {
+        try {
+          const { data: walletResult, error: walletErr } = await admin.rpc("credit_wallets_for_order", {
+            p_order_id: order_id,
+          });
+          if (walletErr) {
+            console.error("Wallet credit error:", walletErr);
+          } else {
+            console.log(`Wallets credited for order ${order_id}:`, walletResult);
+          }
+        } catch (err) {
+          console.error("Wallet credit exception:", err);
+        }
+      }
+
+      return json(updated);
+    }
+
+    // ---- POST /vendor-confirm ----
+    if (route === "vendor-confirm" && req.method === "POST") {
+      const body = await req.json();
+      const { order_id } = body;
+
+      if (!order_id) {
+        return json({ error: "Missing order_id" }, 400);
+      }
+
+      const admin = getAdminClient();
+
+      const { data: order, error: fetchErr } = await admin
+        .from("orders")
+        .select("id, order_status, vendor_confirmed_at, buyer_confirmed_at")
+        .eq("id", order_id)
+        .single();
+
+      if (fetchErr || !order) {
+        return json({ error: "Order not found" }, 404);
+      }
+
+      if (order.vendor_confirmed_at) {
+        return json({ message: "Already confirmed by vendor" });
+      }
+
+      const updateData: Record<string, unknown> = {
+        vendor_confirmed_at: new Date().toISOString(),
+      };
+
+      // If buyer also confirmed, mark as fully confirmed
+      if (order.buyer_confirmed_at) {
+        updateData.order_status = "confirmed";
+        updateData.confirmed_at = new Date().toISOString();
+      }
+
+      const { data: updated, error: updateErr } = await admin
+        .from("orders")
+        .update(updateData)
+        .eq("id", order_id)
+        .select()
+        .single();
+
+      if (updateErr) {
+        console.error("Vendor confirm error:", updateErr);
+        return json({ error: "Failed to confirm" }, 500);
+      }
+
+      // If both confirmed, credit wallets
+      if (updated.vendor_confirmed_at && updated.buyer_confirmed_at) {
+        try {
+          const { data: walletResult, error: walletErr } = await admin.rpc("credit_wallets_for_order", {
+            p_order_id: order_id,
+          });
+          if (walletErr) {
+            console.error("Wallet credit error:", walletErr);
+          } else {
+            console.log(`Wallets credited for order ${order_id}:`, walletResult);
+          }
+        } catch (err) {
+          console.error("Wallet credit exception:", err);
+        }
+      }
+
+      return json(updated);
+    }
+
+    // ---- POST /report-issue ----
+    if (route === "report-issue" && req.method === "POST") {
+      const body = await req.json();
+      const { order_id, reason, notes } = body;
+
+      if (!order_id || !reason) {
+        return json({ error: "Missing order_id or reason" }, 400);
+      }
+
+      const admin = getAdminClient();
+
+      const { error } = await admin
+        .from("order_issues")
+        .insert({ order_id, reason, notes: notes || null });
+
+      if (error) {
+        console.error("Report issue error:", error);
+        return json({ error: "Failed to report issue" }, 500);
+      }
+
+      return json({ ok: true });
+    }
+
     return json({ error: "Not found" }, 404);
   } catch (err) {
     console.error("Unexpected error:", err);

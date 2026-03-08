@@ -692,6 +692,259 @@ serve(async (req) => {
       return json({ settings: data });
     }
 
+    // ========== GET /admin/wallets ==========
+    if (route === "admin" && subRoute === "wallets" && req.method === "GET") {
+      let query = admin
+        .from("wallets")
+        .select("id, owner_id, owner_type, balance, total_earned, total_withdrawn, currency, created_at, updated_at")
+        .order("updated_at", { ascending: false });
+
+      const ownerType = sp.get("ownerType");
+      if (ownerType) query = query.eq("owner_type", ownerType);
+      const ownerId = sp.get("ownerId");
+      if (ownerId) query = query.eq("owner_id", ownerId);
+
+      const { data, error } = await query.limit(200);
+      if (error) return json({ error: error.message }, 500);
+      return json({ wallets: data });
+    }
+
+    // ========== GET /admin/wallets/:id/transactions ==========
+    if (route === "admin" && subRoute === "wallets" && segments[2] && segments[3] === "transactions" && req.method === "GET") {
+      const walletId = segments[2];
+      const { data, error } = await admin
+        .from("wallet_transactions")
+        .select("id, wallet_id, order_id, withdrawal_id, type, amount, description, created_at")
+        .eq("wallet_id", walletId)
+        .order("created_at", { ascending: false })
+        .limit(200);
+
+      if (error) return json({ error: error.message }, 500);
+      return json({ transactions: data });
+    }
+
+    // ========== POST /admin/withdrawals/request ==========
+    if (route === "admin" && subRoute === "withdrawals" && segments[2] === "request" && req.method === "POST") {
+      const body = await req.json();
+      const { ownerId, ownerType, amount, method, phoneNumber } = body;
+
+      if (!ownerId || !ownerType || !amount || !phoneNumber) {
+        return json({ error: "Missing required fields: ownerId, ownerType, amount, phoneNumber" }, 400);
+      }
+
+      const WITHDRAWAL_FEE = 2000;
+      const MIN_WITHDRAWAL = 20000;
+
+      if (amount < MIN_WITHDRAWAL) {
+        return json({ error: `Minimum withdrawal is ${MIN_WITHDRAWAL} TZS` }, 400);
+      }
+
+      // Get wallet
+      const { data: wallet, error: walletErr } = await admin
+        .from("wallets")
+        .select("id, balance")
+        .eq("owner_id", ownerId)
+        .eq("owner_type", ownerType)
+        .single();
+
+      if (walletErr || !wallet) {
+        return json({ error: "Wallet not found" }, 404);
+      }
+
+      if (wallet.balance < amount) {
+        return json({ error: `Insufficient balance. Available: ${wallet.balance} TZS, Requested: ${amount} TZS` }, 400);
+      }
+
+      const netAmount = amount - WITHDRAWAL_FEE;
+      if (netAmount <= 0) {
+        return json({ error: `Amount must be greater than withdrawal fee (${WITHDRAWAL_FEE} TZS)` }, 400);
+      }
+
+      // Create withdrawal record
+      const { data: withdrawal, error: wdErr } = await admin
+        .from("withdrawals")
+        .insert({
+          wallet_id: wallet.id,
+          owner_id: ownerId,
+          owner_type: ownerType,
+          amount,
+          fee: WITHDRAWAL_FEE,
+          net_amount: netAmount,
+          method: method || "mobile_money",
+          phone_number: phoneNumber,
+          status: "pending",
+        })
+        .select("id")
+        .single();
+
+      if (wdErr) {
+        console.error("Withdrawal creation error:", wdErr);
+        return json({ error: "Failed to create withdrawal" }, 500);
+      }
+
+      // Deduct from wallet balance immediately
+      await admin
+        .from("wallets")
+        .update({
+          balance: wallet.balance - amount,
+          total_withdrawn: (wallet as any).total_withdrawn
+            ? Number((wallet as any).total_withdrawn) + amount
+            : amount,
+        })
+        .eq("id", wallet.id);
+
+      // Record debit transaction
+      await admin.from("wallet_transactions").insert({
+        wallet_id: wallet.id,
+        withdrawal_id: withdrawal.id,
+        type: "debit",
+        amount,
+        description: `Withdrawal request #${withdrawal.id.slice(0, 8)} (fee: ${WITHDRAWAL_FEE} TZS)`,
+      });
+
+      return json({
+        withdrawal_id: withdrawal.id,
+        amount,
+        fee: WITHDRAWAL_FEE,
+        net_amount: netAmount,
+        status: "pending",
+      }, 201);
+    }
+
+    // ========== POST /admin/withdrawals/process ==========
+    if (route === "admin" && subRoute === "withdrawals" && segments[2] === "process" && req.method === "POST") {
+      const body = await req.json();
+      const { withdrawalId } = body;
+
+      if (!withdrawalId) {
+        return json({ error: "Missing withdrawalId" }, 400);
+      }
+
+      const { data: wd, error: wdErr } = await admin
+        .from("withdrawals")
+        .select("*, wallets(owner_id, owner_type)")
+        .eq("id", withdrawalId)
+        .single();
+
+      if (wdErr || !wd) {
+        return json({ error: "Withdrawal not found" }, 404);
+      }
+
+      if (wd.status !== "pending") {
+        return json({ error: `Withdrawal is already ${wd.status}` }, 400);
+      }
+
+      // Update to processing
+      await admin.from("withdrawals").update({ status: "processing" }).eq("id", withdrawalId);
+
+      // Look up payout account
+      const account = await getPayoutAccountDetails(admin, wd.owner_id);
+
+      let providerRef: string | null = null;
+      let finalStatus = "completed";
+      let failureReason: string | null = null;
+
+      if (account) {
+        try {
+          const reference = `afrilink_withdrawal_${withdrawalId}`;
+          const briqResult = await createBriqPayout({
+            amount: wd.net_amount,
+            currency: "TZS",
+            recipientName: account.account_name || "Recipient",
+            accountNumber: account.account_number || wd.phone_number,
+            bankCode: account.provider || "MPESA",
+            reference,
+            description: `Withdrawal for ${wd.owner_type} ${wd.owner_id}`,
+          });
+          providerRef = briqResult.transaction_id;
+          finalStatus = briqResult.status === "processing" ? "processing" : "completed";
+        } catch (err) {
+          console.error("Withdrawal payout error:", err);
+          finalStatus = "failed";
+          failureReason = (err as Error).message;
+        }
+      } else {
+        // No payout account — try using the phone number directly
+        try {
+          const reference = `afrilink_withdrawal_${withdrawalId}`;
+          const briqResult = await createBriqPayout({
+            amount: wd.net_amount,
+            currency: "TZS",
+            recipientName: wd.owner_type,
+            accountNumber: wd.phone_number,
+            bankCode: "MPESA",
+            reference,
+            description: `Withdrawal for ${wd.owner_type} ${wd.owner_id}`,
+          });
+          providerRef = briqResult.transaction_id;
+          finalStatus = briqResult.status === "processing" ? "processing" : "completed";
+        } catch (err) {
+          console.error("Withdrawal payout error (direct):", err);
+          finalStatus = "failed";
+          failureReason = (err as Error).message;
+        }
+      }
+
+      // Update withdrawal status
+      await admin.from("withdrawals").update({
+        status: finalStatus,
+        provider_reference: providerRef,
+        failure_reason: failureReason,
+        processed_at: finalStatus !== "failed" ? new Date().toISOString() : null,
+      }).eq("id", withdrawalId);
+
+      // If failed, refund wallet balance
+      if (finalStatus === "failed") {
+        const { data: wallet } = await admin
+          .from("wallets")
+          .select("id, balance, total_withdrawn")
+          .eq("owner_id", wd.owner_id)
+          .eq("owner_type", wd.owner_type)
+          .single();
+
+        if (wallet) {
+          await admin.from("wallets").update({
+            balance: Number(wallet.balance) + Number(wd.amount),
+            total_withdrawn: Math.max(0, Number(wallet.total_withdrawn) - Number(wd.amount)),
+          }).eq("id", wallet.id);
+
+          await admin.from("wallet_transactions").insert({
+            wallet_id: wallet.id,
+            withdrawal_id: withdrawalId,
+            type: "credit",
+            amount: wd.amount,
+            description: `Refund for failed withdrawal #${withdrawalId.slice(0, 8)}`,
+          });
+        }
+      }
+
+      return json({
+        withdrawal_id: withdrawalId,
+        status: finalStatus,
+        provider_reference: providerRef,
+        failure_reason: failureReason,
+      });
+    }
+
+    // ========== GET /admin/withdrawals ==========
+    if (route === "admin" && subRoute === "withdrawals" && !segments[2] && req.method === "GET") {
+      let query = admin
+        .from("withdrawals")
+        .select("id, wallet_id, owner_id, owner_type, amount, fee, net_amount, method, phone_number, status, provider_reference, failure_reason, processed_at, created_at")
+        .order("created_at", { ascending: false });
+
+      const status = sp.get("status");
+      if (status) query = query.eq("status", status);
+      const ownerType = sp.get("ownerType");
+      if (ownerType) query = query.eq("owner_type", ownerType);
+      const ownerId = sp.get("ownerId");
+      if (ownerId) query = query.eq("owner_id", ownerId);
+
+      const { data, error } = await query.limit(200);
+      if (error) return json({ error: error.message }, 500);
+      return json({ withdrawals: data });
+    }
+
     return json({ error: "Not found" }, 404);
   } catch (err) {
     console.error("Admin API error:", err);
