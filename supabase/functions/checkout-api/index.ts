@@ -394,14 +394,41 @@ serve(async (req) => {
         return json({ error: "Failed to create order" }, 500);
       }
 
-      return json({
-        order_id: order.id,
-        order_number: order.order_number,
-        subtotal: item_price,
-        distance_km,
-        delivery_fee,
-        total: total_amount,
-      }, 201);
+      // Initiate MeetPay payment
+      try {
+        const meetpayResult = await initiateMeetPayPayment({
+          amount: total_amount,
+          phone: customer_phone,
+          customerName: customer_name,
+          orderId: order.id,
+          orderNumber: order.order_number,
+          idempotencyKey: checkout_session_id,
+        });
+
+        return json({
+          order_id: order.id,
+          order_number: order.order_number,
+          subtotal: item_price,
+          distance_km,
+          delivery_fee,
+          total: total_amount,
+          payment_id: meetpayResult.id,
+          payment_status: meetpayResult.status,
+          payment_url: meetpayResult.payment_url || null,
+        }, 201);
+      } catch (payErr: any) {
+        console.error("MeetPay payment initiation failed:", payErr);
+        // Order is created but payment failed — mark order as failed
+        await admin
+          .from("orders")
+          .update({ payment_status: "failed", order_status: "cancelled" })
+          .eq("id", order.id);
+
+        return json({ 
+          error: `Payment initiation failed: ${payErr.message || "Unknown error"}`,
+          order_id: order.id,
+        }, 502);
+      }
     }
 
     // ---- POST /checkout/confirm ----
