@@ -36,9 +36,12 @@ export default function ProductPage() {
 
   const handleBuyNow = () => {
     const ref = searchParams.get('ref');
-    const checkoutUrl = ref 
-      ? `/checkout/${product.slug}?ref=${encodeURIComponent(ref)}`
-      : `/checkout/${product.slug}`;
+    const source = searchParams.get('source');
+    const params = new URLSearchParams();
+    if (ref) params.set('ref', ref);
+    if (source) params.set('source', source);
+    const qs = params.toString();
+    const checkoutUrl = `/checkout/${product.slug}${qs ? `?${qs}` : ''}`;
     navigate(checkoutUrl);
   };
 

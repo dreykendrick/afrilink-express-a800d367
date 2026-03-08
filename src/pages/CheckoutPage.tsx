@@ -16,6 +16,8 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
+  const orderSource = (searchParams.get('source') === 'marketplace' ? 'marketplace' : 'affiliate_link') as import('@/lib/types').CheckoutSource;
+
   useEffect(() => {
     const ref = searchParams.get('ref');
     if (ref) {
@@ -117,6 +119,7 @@ export default function CheckoutPage() {
         totalAmount={totalAmount}
         isWithinRange={deliveryEstimate.is_within_range}
         onSuccess={handleOrderSuccess}
+        source={orderSource}
       />
     </div>
   );
