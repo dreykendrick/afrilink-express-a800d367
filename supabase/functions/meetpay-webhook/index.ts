@@ -195,17 +195,18 @@ serve(async (req) => {
         return json({ error: "Order not found" }, 404);
       }
 
-      // Idempotency: already paid
-      if (order.payment_status === "paid") {
-        console.log(`Order ${orderId} already paid — idempotent return`);
+      // Idempotency: already confirmed
+      if (order.payment_status === "confirmed") {
+        console.log(`Order ${orderId} already confirmed — idempotent return`);
         return json({ ok: true, message: "Already processed" });
       }
 
       // Update order status atomically
+      // DB constraint allows: 'pending', 'confirmed', 'failed', 'refunded'
       const { error: updateErr } = await admin
         .from("orders")
         .update({
-          payment_status: "paid",
+          payment_status: "confirmed",
           order_status: "paid",
         })
         .eq("id", orderId)

@@ -85,9 +85,10 @@ export function PaymentButton({
 
       toast({ title: 'Payment successful!', description: 'Your order has been placed.' });
       onSuccess(result.order_id);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Payment error:', err);
-      toast({ variant: 'destructive', title: 'Payment failed', description: 'Something went wrong. Please try again.' });
+      const errorMessage = err?.message || 'Something went wrong. Please try again.';
+      toast({ variant: 'destructive', title: 'Payment failed', description: errorMessage });
       idempotencyKeyRef.current = null;
     } finally {
       setIsLoading(false);
