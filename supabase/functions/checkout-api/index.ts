@@ -349,6 +349,35 @@ serve(async (req) => {
             },
           };
           console.log("[checkout] External product resolved:", JSON.stringify({ id: product.id, price: product.price, vendor: product.vendor }));
+
+          // Sync vendor + product to local DB so FK constraint is satisfied
+          const vendorId = extProduct.vendor_id || product.vendor_id || product.id;
+          const vendorName = extProduct.vendor_name || "External Vendor";
+          const vendorPhone = "0000000000";
+          
+          // Upsert vendor
+          await admin.from("vendors").upsert({
+            id: vendorId,
+            name: vendorName,
+            phone: vendorPhone,
+            lat: product.vendor.lat,
+            lng: product.vendor.lng,
+            address: product.vendor.address,
+          }, { onConflict: "id" });
+
+          // Upsert product
+          await admin.from("products").upsert({
+            id: product.id,
+            vendor_id: vendorId,
+            name: extProduct.title || extProduct.name || "External Product",
+            slug: extProduct.slug || product.id,
+            price: product.price,
+            description: extProduct.description || null,
+            images: extProduct.image_urls || (extProduct.image_url ? [extProduct.image_url] : []),
+            is_active: true,
+          }, { onConflict: "id" });
+
+          console.log("[checkout] Synced external product + vendor to local DB");
         } catch (extErr) {
           console.error("[checkout] External product fetch error:", extErr);
           return json({ error: "Product not found" }, 404);
