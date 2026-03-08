@@ -44,6 +44,17 @@ export default function CheckoutPage() {
   }, []);
 
   const itemPrice = product?.price || 0;
+
+  if (import.meta.env.DEV && product) {
+    console.log('[DEBUG] CheckoutPage vendor location:', {
+      vendor_lat: product.vendor_lat,
+      vendor_lng: product.vendor_lng,
+      vendor_address: product.vendor_address,
+      lat_type: typeof product.vendor_lat,
+      lng_type: typeof product.vendor_lng,
+    });
+  }
+
   const vendorLocationMissing = product != null && (product.vendor_lat == null || product.vendor_lng == null);
 
   const deliveryEstimate = useMemo(
