@@ -335,7 +335,9 @@ serve(async (req) => {
             console.error(`[checkout] External product lookup failed: ${extRes.status}`);
             return json({ error: "Product not found" }, 404);
           }
-          const extProduct = await extRes.json();
+          const extRaw = await extRes.json();
+          // External API may wrap in {success, product} or return flat
+          const extProduct = extRaw?.product ?? extRaw;
           product = {
             id: extProduct.id,
             price: extProduct.price,
@@ -346,6 +348,7 @@ serve(async (req) => {
               address: extProduct.vendor_address ?? null,
             },
           };
+          console.log("[checkout] External product resolved:", JSON.stringify({ id: product.id, price: product.price, vendor: product.vendor }));
         } catch (extErr) {
           console.error("[checkout] External product fetch error:", extErr);
           return json({ error: "Product not found" }, 404);
