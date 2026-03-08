@@ -341,7 +341,7 @@ serve(async (req) => {
       const { data: order, error } = await admin
         .from("orders")
         .update({
-          payment_status: "paid",
+          payment_status: "confirmed",
           order_status: "paid",
         })
         .eq("id", order_id)
