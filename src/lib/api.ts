@@ -63,7 +63,7 @@ import type { Product, Order, CheckoutPayload, CheckoutResult, DeliverySettings 
 import { DEFAULT_DELIVERY_SETTINGS } from '@/lib/delivery';
 
 export async function fetchProduct(idOrSlug: string): Promise<Product> {
-  const raw = await externalFetch<any>(`/products/${encodeURIComponent(idOrSlug)}`);
+  const raw = await localFetch<any>(`/products/${encodeURIComponent(idOrSlug)}`);
   const p = raw?.product ?? raw;
   return normalizeProduct(p);
 }
