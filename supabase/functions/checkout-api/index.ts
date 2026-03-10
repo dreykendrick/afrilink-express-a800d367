@@ -271,14 +271,72 @@ serve(async (req) => {
         console.error("Product lookup error:", error);
         return json({ error: "Unable to load product" }, 500);
       }
-      if (!data) {
+
+      if (data) {
+        const vendor_lat = (data as any).vendor?.lat ?? null;
+        const vendor_lng = (data as any).vendor?.lng ?? null;
+        const vendor_address = (data as any).vendor?.address ?? null;
+        const { vendor, ...rest } = data as any;
+        return json({ ...rest, vendor_lat, vendor_lng, vendor_address });
+      }
+
+      // Fallback: fetch from external backend and sync locally
+      console.log(`[products] Not found locally (${column}=${param}), trying external API...`);
+      try {
+        const extRes = await fetch(`${EXTERNAL_SUPABASE_URL}/functions/v1/checkout-api/products/${encodeURIComponent(param)}`, {
+          headers: { "apikey": EXTERNAL_ANON_KEY, "Content-Type": "application/json" },
+        });
+        if (!extRes.ok) {
+          console.error(`[products] External lookup failed: ${extRes.status}`);
+          return json({ error: "Product not found" }, 404);
+        }
+        const extRaw = await extRes.json();
+        const ext = extRaw?.product ?? extRaw;
+
+        // Sync vendor + product to local DB
+        const vendorId = ext.vendor_id || ext.id;
+        await admin.from("vendors").upsert({
+          id: vendorId,
+          name: ext.vendor_name || "External Vendor",
+          phone: ext.vendor_phone || "0000000000",
+          lat: ext.vendor_lat ?? null,
+          lng: ext.vendor_lng ?? null,
+          address: ext.vendor_address ?? null,
+        }, { onConflict: "id" });
+
+        await admin.from("products").upsert({
+          id: ext.id,
+          vendor_id: vendorId,
+          name: ext.title || ext.name || "Product",
+          slug: ext.slug || ext.id,
+          price: ext.price,
+          description: ext.description || null,
+          short_description: ext.short_description || null,
+          images: ext.image_urls || ext.images || (ext.image_url ? [ext.image_url] : []),
+          is_active: true,
+        }, { onConflict: "id" });
+
+        console.log(`[products] Synced external product ${ext.id} to local DB`);
+        return json({
+          id: ext.id,
+          vendor_id: vendorId,
+          slug: ext.slug || ext.id,
+          name: ext.title || ext.name || "Product",
+          price: ext.price,
+          description: ext.description || null,
+          short_description: ext.short_description || null,
+          images: ext.image_urls || ext.images || (ext.image_url ? [ext.image_url] : []),
+          is_active: true,
+          created_at: ext.created_at || new Date().toISOString(),
+          updated_at: ext.updated_at || new Date().toISOString(),
+          vendor_lat: ext.vendor_lat ?? null,
+          vendor_lng: ext.vendor_lng ?? null,
+          vendor_address: ext.vendor_address ?? null,
+        });
+      } catch (extErr) {
+        console.error("[products] External product fetch error:", extErr);
         return json({ error: "Product not found" }, 404);
       }
-      const vendor_lat = (data as any).vendor?.lat ?? null;
-      const vendor_lng = (data as any).vendor?.lng ?? null;
-      const vendor_address = (data as any).vendor?.address ?? null;
-      const { vendor, ...rest } = data as any;
-      return json({ ...rest, vendor_lat, vendor_lng, vendor_address });
     }
 
     // ---- GET /affiliates/:code ----
