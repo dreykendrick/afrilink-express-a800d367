@@ -353,10 +353,33 @@ serve(async (req) => {
         console.error("Affiliate lookup error:", error);
         return json({ error: "Unable to load affiliate" }, 500);
       }
-      if (!data) {
+      if (data) return json(data);
+
+      // Fallback: fetch from external backend and sync
+      console.log(`[affiliates] Not found locally (code=${param}), trying external API...`);
+      try {
+        const extRes = await fetch(`${EXTERNAL_SUPABASE_URL}/functions/v1/checkout-api/affiliates/${encodeURIComponent(param)}`, {
+          headers: { "apikey": EXTERNAL_ANON_KEY, "Content-Type": "application/json" },
+        });
+        if (!extRes.ok) return json({ error: "Affiliate not found" }, 404);
+        const extAff = await extRes.json();
+        if (extAff?.id) {
+          await admin.from("affiliates").upsert({
+            id: extAff.id,
+            code: extAff.code || param,
+            name: extAff.name || "External Affiliate",
+            phone: extAff.phone || null,
+            commission_rate: extAff.commission_rate ?? 0.05,
+            is_active: true,
+          }, { onConflict: "id" });
+          console.log(`[affiliates] Synced external affiliate ${extAff.id}`);
+          return json({ id: extAff.id, code: extAff.code || param, name: extAff.name, commission_rate: extAff.commission_rate });
+        }
+        return json({ error: "Affiliate not found" }, 404);
+      } catch (extErr) {
+        console.error("[affiliates] External fetch error:", extErr);
         return json({ error: "Affiliate not found" }, 404);
       }
-      return json(data);
     }
 
     // ---- GET /delivery-settings ----
