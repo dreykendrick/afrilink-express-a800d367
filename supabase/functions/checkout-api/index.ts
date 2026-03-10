@@ -527,6 +527,7 @@ serve(async (req) => {
       let affiliate_rate_at_purchase: number | null = null;
 
       if (source === "affiliate_link" && affiliate_ref) {
+        // Check local DB first
         const { data: aff } = await admin
           .from("affiliates")
           .select("id, commission_rate")
@@ -536,6 +537,35 @@ serve(async (req) => {
         if (aff) {
           affiliate_id = aff.id;
           affiliate_rate_at_purchase = aff.commission_rate;
+        } else {
+          // Fallback: fetch from external backend and sync
+          console.log(`[checkout] Affiliate "${affiliate_ref}" not found locally, trying external API...`);
+          try {
+            const extAffRes = await fetch(`${EXTERNAL_SUPABASE_URL}/functions/v1/checkout-api/affiliates/${encodeURIComponent(affiliate_ref)}`, {
+              headers: { "apikey": EXTERNAL_ANON_KEY, "Content-Type": "application/json" },
+            });
+            if (extAffRes.ok) {
+              const extAff = await extAffRes.json();
+              if (extAff?.id) {
+                // Sync affiliate to local DB
+                await admin.from("affiliates").upsert({
+                  id: extAff.id,
+                  code: extAff.code || affiliate_ref,
+                  name: extAff.name || "External Affiliate",
+                  phone: extAff.phone || null,
+                  commission_rate: extAff.commission_rate ?? 0.05,
+                  is_active: true,
+                }, { onConflict: "id" });
+                affiliate_id = extAff.id;
+                affiliate_rate_at_purchase = extAff.commission_rate ?? 0.05;
+                console.log(`[checkout] Synced external affiliate ${extAff.id} (code=${extAff.code})`);
+              }
+            } else {
+              console.warn(`[checkout] External affiliate lookup failed: ${extAffRes.status}`);
+            }
+          } catch (affErr) {
+            console.warn("[checkout] External affiliate fetch error:", affErr);
+          }
         }
       }
 
