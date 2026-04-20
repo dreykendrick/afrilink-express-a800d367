@@ -17,25 +17,41 @@ interface MapPinSelectorProps {
   lat: number | null;
   lng: number | null;
   onChange: (lat: number, lng: number) => void;
+  address: string;
+  onAddressChange: (address: string) => void;
 }
 
 const DEFAULT_CENTER: [number, number] = [-6.7924, 39.2083];
 const DEFAULT_ZOOM = 13;
 const PLACED_ZOOM = 15;
 
-export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
+export function MapPinSelector({ lat, lng, onChange, address, onAddressChange }: MapPinSelectorProps) {
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [pinPlaced, setPinPlaced] = useState(lat != null && lng != null);
   const [geoLoading, setGeoLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
 
+  // Reverse geocode lat/lng to a human-readable address
+  const reverseGeocode = useCallback(async (la: number, ln: number) => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${la}&lon=${ln}&zoom=16&addressdetails=1`,
+      );
+      const data = await res.json();
+      if (data?.display_name) {
+        onAddressChange(data.display_name);
+      }
+    } catch {
+      // Silent fail — user can still type the address manually
+    }
+  }, [onAddressChange]);
+
   const placeOrMovePin = useCallback(
-    (newLat: number, newLng: number, fly = true) => {
+    (newLat: number, newLng: number, fly = true, updateAddress = true) => {
       const map = mapRef.current;
       if (!map) return;
 
@@ -46,6 +62,7 @@ export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
         marker.on('dragend', () => {
           const pos = marker.getLatLng();
           onChange(pos.lat, pos.lng);
+          reverseGeocode(pos.lat, pos.lng);
         });
         markerRef.current = marker;
       }
@@ -53,8 +70,9 @@ export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
       if (fly) map.flyTo([newLat, newLng], PLACED_ZOOM, { duration: 1 });
       setPinPlaced(true);
       onChange(newLat, newLng);
+      if (updateAddress) reverseGeocode(newLat, newLng);
     },
-    [onChange],
+    [onChange, reverseGeocode],
   );
 
   // Initialize map
@@ -83,7 +101,7 @@ export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
 
     // Place initial marker if coordinates exist
     if (lat != null && lng != null) {
-      placeOrMovePin(lat, lng, false);
+      placeOrMovePin(lat, lng, false, false);
     }
 
     return () => {
@@ -121,7 +139,7 @@ export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
   const handleSearch = useCallback(
     async (e?: React.FormEvent) => {
       e?.preventDefault();
-      const q = searchQuery.trim();
+      const q = address.trim();
       if (!q) return;
       setSearchLoading(true);
       try {
@@ -130,7 +148,8 @@ export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
         );
         const results = await res.json();
         if (results.length > 0) {
-          placeOrMovePin(parseFloat(results[0].lat), parseFloat(results[0].lon));
+          // Don't overwrite the user's typed address with the geocoder's verbose name
+          placeOrMovePin(parseFloat(results[0].lat), parseFloat(results[0].lon), true, false);
         }
       } catch {
         // Search failed silently
@@ -138,30 +157,29 @@ export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
         setSearchLoading(false);
       }
     },
-    [searchQuery, placeOrMovePin],
+    [address, placeOrMovePin],
   );
 
   return (
     <div className="space-y-3">
-      {/* Search bar */}
+      {/* Address input doubles as map search */}
       <form onSubmit={handleSearch} className="flex gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search area e.g. Mikocheni, Dar es Salaam"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-10 pl-9 text-sm"
+            placeholder="e.g. Mikocheni, Regent Estate, Dar es Salaam"
+            value={address}
+            onChange={(e) => onAddressChange(e.target.value)}
+            className="h-12 pl-9"
           />
         </div>
         <Button
           type="submit"
           variant="outline"
-          size="sm"
-          className="h-10 px-3"
-          disabled={searchLoading || !searchQuery.trim()}
+          className="h-12 px-4"
+          disabled={searchLoading || !address.trim()}
         >
-          {searchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Go'}
+          {searchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Search className="w-4 h-4 mr-1" />Find</>}
         </Button>
       </form>
 

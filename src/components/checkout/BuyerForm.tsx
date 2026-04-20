@@ -57,31 +57,21 @@ export function BuyerForm({ buyerInfo, onChange }: BuyerFormProps) {
         </p>
       </div>
 
-      {/* Delivery Address */}
-      <div className="space-y-2">
-        <Label htmlFor="address" className="flex items-center gap-2 text-muted-foreground">
-          <MapPin className="w-4 h-4" />
-          Delivery Address
-        </Label>
-        <Input
-          id="address"
-          placeholder="e.g. Mikocheni, Regent Estate, Dar es Salaam"
-          value={buyerInfo.delivery_address}
-          onChange={(e) => updateField('delivery_address', e.target.value)}
-          className="h-12"
-        />
-      </div>
-
-      {/* Map Pin Selector */}
+      {/* Delivery Address + Map (combined) */}
       <div className="space-y-2">
         <Label className="flex items-center gap-2 text-muted-foreground">
           <MapPin className="w-4 h-4" />
-          Pin Your Delivery Location
+          Delivery Address
         </Label>
+        <p className="text-xs text-muted-foreground">
+          Type your address and tap <span className="font-medium">Find</span>, or drop a pin directly on the map.
+        </p>
         <MapPinSelector
           lat={buyerInfo.delivery_lat}
           lng={buyerInfo.delivery_lng}
           onChange={handleMapPinChange}
+          address={buyerInfo.delivery_address}
+          onAddressChange={(address) => updateField('delivery_address', address)}
         />
       </div>
 
