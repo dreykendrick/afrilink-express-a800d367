@@ -17,25 +17,41 @@ interface MapPinSelectorProps {
   lat: number | null;
   lng: number | null;
   onChange: (lat: number, lng: number) => void;
+  address: string;
+  onAddressChange: (address: string) => void;
 }
 
 const DEFAULT_CENTER: [number, number] = [-6.7924, 39.2083];
 const DEFAULT_ZOOM = 13;
 const PLACED_ZOOM = 15;
 
-export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
+export function MapPinSelector({ lat, lng, onChange, address, onAddressChange }: MapPinSelectorProps) {
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [pinPlaced, setPinPlaced] = useState(lat != null && lng != null);
   const [geoLoading, setGeoLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
 
+  // Reverse geocode lat/lng to a human-readable address
+  const reverseGeocode = useCallback(async (la: number, ln: number) => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${la}&lon=${ln}&zoom=16&addressdetails=1`,
+      );
+      const data = await res.json();
+      if (data?.display_name) {
+        onAddressChange(data.display_name);
+      }
+    } catch {
+      // Silent fail — user can still type the address manually
+    }
+  }, [onAddressChange]);
+
   const placeOrMovePin = useCallback(
-    (newLat: number, newLng: number, fly = true) => {
+    (newLat: number, newLng: number, fly = true, updateAddress = true) => {
       const map = mapRef.current;
       if (!map) return;
 
@@ -46,6 +62,7 @@ export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
         marker.on('dragend', () => {
           const pos = marker.getLatLng();
           onChange(pos.lat, pos.lng);
+          reverseGeocode(pos.lat, pos.lng);
         });
         markerRef.current = marker;
       }
@@ -53,8 +70,9 @@ export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
       if (fly) map.flyTo([newLat, newLng], PLACED_ZOOM, { duration: 1 });
       setPinPlaced(true);
       onChange(newLat, newLng);
+      if (updateAddress) reverseGeocode(newLat, newLng);
     },
-    [onChange],
+    [onChange, reverseGeocode],
   );
 
   // Initialize map
@@ -83,7 +101,7 @@ export function MapPinSelector({ lat, lng, onChange }: MapPinSelectorProps) {
 
     // Place initial marker if coordinates exist
     if (lat != null && lng != null) {
-      placeOrMovePin(lat, lng, false);
+      placeOrMovePin(lat, lng, false, false);
     }
 
     return () => {
