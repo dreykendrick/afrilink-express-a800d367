@@ -139,7 +139,7 @@ export function MapPinSelector({ lat, lng, onChange, address, onAddressChange }:
   const handleSearch = useCallback(
     async (e?: React.FormEvent) => {
       e?.preventDefault();
-      const q = searchQuery.trim();
+      const q = address.trim();
       if (!q) return;
       setSearchLoading(true);
       try {
@@ -148,7 +148,8 @@ export function MapPinSelector({ lat, lng, onChange, address, onAddressChange }:
         );
         const results = await res.json();
         if (results.length > 0) {
-          placeOrMovePin(parseFloat(results[0].lat), parseFloat(results[0].lon));
+          // Don't overwrite the user's typed address with the geocoder's verbose name
+          placeOrMovePin(parseFloat(results[0].lat), parseFloat(results[0].lon), true, false);
         }
       } catch {
         // Search failed silently
@@ -156,30 +157,29 @@ export function MapPinSelector({ lat, lng, onChange, address, onAddressChange }:
         setSearchLoading(false);
       }
     },
-    [searchQuery, placeOrMovePin],
+    [address, placeOrMovePin],
   );
 
   return (
     <div className="space-y-3">
-      {/* Search bar */}
+      {/* Address input doubles as map search */}
       <form onSubmit={handleSearch} className="flex gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search area e.g. Mikocheni, Dar es Salaam"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-10 pl-9 text-sm"
+            placeholder="e.g. Mikocheni, Regent Estate, Dar es Salaam"
+            value={address}
+            onChange={(e) => onAddressChange(e.target.value)}
+            className="h-12 pl-9"
           />
         </div>
         <Button
           type="submit"
           variant="outline"
-          size="sm"
-          className="h-10 px-3"
-          disabled={searchLoading || !searchQuery.trim()}
+          className="h-12 px-4"
+          disabled={searchLoading || !address.trim()}
         >
-          {searchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Go'}
+          {searchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Search className="w-4 h-4 mr-1" />Find</>}
         </Button>
       </form>
 
