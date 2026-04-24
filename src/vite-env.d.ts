@@ -1,1 +1,7 @@
 /// <reference types="vite/client" />
+
+declare const __APP_BUILD_VERSION__: string;
+
+interface Window {
+  __APP_BUILD_VERSION__?: string;
+}
