@@ -1,73 +1,120 @@
-# Welcome to your Lovable project
+AfriLink 🌍✨
 
-## Project info
+Connecting Africa, One Link at a Time
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+AfriLink is a modern digital platform designed to empower African creators, businesses, and entrepreneurs by bringing their content, products, and services into one unified ecosystem.
 
-## How can I edit this code?
+Think of it as your all-in-one digital presence hub + marketplace + monetization tool, built specifically with Africa in mind.
 
-There are several ways of editing your application.
+🚀 Vision
 
-**Use Lovable**
+AfriLink exists to solve one core problem:
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+African creators and businesses are scattered across platforms with no central identity or monetization system.
 
-Changes made via Lovable will be committed automatically to this repo.
+We’re building a future where:
 
-**Use your preferred IDE**
+Every African entrepreneur has a digital home
+Every creator can monetize directly
+Every user can discover, connect, and transact seamlessly
+🧩 Core Features
+🔗 Smart Profile System
+Customizable user profiles
+Centralized links (socials, services, products)
+Clean, modern UI for personal branding
+🛒 Built-in Marketplace
+Sell products directly inside the app
+Add to cart → Checkout → Done
+No external redirects, no friction
+💳 Seamless Checkout Experience
+Native checkout flow
+Designed for simplicity and speed
+Built for African payment behaviors (scalable for integrations)
+📱 App-First Experience
+Mobile-optimized design
+Smooth navigation and intuitive UX
+Built for real-world usage, not just aesthetics
+🌐 Discovery Layer (Upcoming)
+Explore creators, brands, and businesses
+Algorithmic + curated discovery
+Boost visibility for local talent
+🎯 Target Users
+Creators & Influencers
+Small & Medium Businesses
+Freelancers & Developers
+Digital Entrepreneurs
+Anyone building an online presence in Africa
+🛠️ Tech Stack (Current Direction)
+Frontend: HTML, CSS, JavaScript
+Mobile Direction: Flutter (expansion-ready)
+Backend: (Pluggable / scalable architecture planned)
+Design: Minimal, modern, brand-driven UI
+🎨 Brand Identity
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+AfriLink is built around:
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+Clean, modern aesthetics
+African-inspired digital future
+Simplicity + power combined
 
-Follow these steps:
+Not loud. Not chaotic. Just premium and intentional.
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+📦 Project Status
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+🚧 Soft Launch Phase
 
-# Step 3: Install the necessary dependencies.
-npm i
+Core UI built
+Marketplace + checkout visuals ready
+App not yet publicly downloadable
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+We are currently:
 
-**Edit a file directly in GitHub**
+Refining UX
+Preparing Play Store launch assets
+Building early brand presence
+📸 Content Strategy
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+AfriLink is being marketed using:
 
-**Use GitHub Codespaces**
+App-style UI screenshots
+Clean, minimal product visuals
+Feature-focused social posts
+Real-use-case storytelling
+🤝 Contributing
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+This project is currently in a controlled development phase.
+Collaboration is selective and focused on:
 
-## What technologies are used for this project?
+UI/UX improvements
+Frontend development
+Brand & design systems
+Growth strategy
+💡 Future Roadmap
+Payment gateway integrations (Africa-first)
+Creator monetization tools
+Analytics dashboard
+AI-powered recommendations
+Web + Mobile full sync
+Business tools (inventory, insights, CRM-lite)
+🧠 Philosophy
 
-This project is built with:
+AfriLink isn’t just another app.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+It’s part of a bigger shift:
 
-## How can I deploy this project?
+From consumers → to creators
+From users → to owners
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+📬 Contact / Access
 
-## Can I connect a custom domain to my Lovable project?
+🌐 Website: https://www.afrilink.info/
 
-Yes, you can!
+📢 Socials: @its.afrilink
+📩 Early Access: available in our website
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+⚡ Final Note
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+AfriLink is being built with one mindset:
+
+Africa doesn’t need to catch up.
+We build our own systems.
