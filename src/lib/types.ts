@@ -105,6 +105,11 @@ export interface Order {
   buyer_user_id: string | null;
   buyer_role: BuyerRole | null;
   affiliate_rate_at_purchase: number | null;
+  // External Order Service (order-guardian)
+  external_order_id?: string | null;
+  tracking_token?: string | null;
+  tracking_url?: string | null;
+  external_forwarded_at?: string | null;
   // Joined
   product?: Product;
 }

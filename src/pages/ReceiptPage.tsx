@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useOrder } from '@/hooks/useOrder';
 import { PageLoader } from '@/components/ui/PageLoader';
@@ -10,6 +11,20 @@ import { Button } from '@/components/ui/button';
 export default function ReceiptPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const { data: order, isLoading, error, refetch } = useOrder(orderId || '');
+  const redirectedRef = useRef(false);
+
+  // Once payment is confirmed and the Order Service has issued a tracking URL,
+  // forward the buyer to the official tracking page.
+  useEffect(() => {
+    if (
+      !redirectedRef.current &&
+      order?.payment_status === 'confirmed' &&
+      order?.tracking_url
+    ) {
+      redirectedRef.current = true;
+      window.location.href = order.tracking_url;
+    }
+  }, [order?.payment_status, order?.tracking_url]);
 
   if (isLoading) {
     return <PageLoader message="Loading your order..." />;
