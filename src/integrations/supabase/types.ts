@@ -296,6 +296,8 @@ export type Database = {
           delivery_lng: number | null
           delivery_settings_snapshot: Json | null
           distance_km: number | null
+          external_forwarded_at: string | null
+          external_order_id: string | null
           id: string
           item_price: number
           notification_status: string | null
@@ -305,6 +307,8 @@ export type Database = {
           product_id: string
           source: string | null
           total_amount: number
+          tracking_token: string | null
+          tracking_url: string | null
           updated_at: string
           vendor_confirmed_at: string | null
           vendor_notified_at: string | null
@@ -330,6 +334,8 @@ export type Database = {
           delivery_lng?: number | null
           delivery_settings_snapshot?: Json | null
           distance_km?: number | null
+          external_forwarded_at?: string | null
+          external_order_id?: string | null
           id?: string
           item_price: number
           notification_status?: string | null
@@ -339,6 +345,8 @@ export type Database = {
           product_id: string
           source?: string | null
           total_amount: number
+          tracking_token?: string | null
+          tracking_url?: string | null
           updated_at?: string
           vendor_confirmed_at?: string | null
           vendor_notified_at?: string | null
@@ -364,6 +372,8 @@ export type Database = {
           delivery_lng?: number | null
           delivery_settings_snapshot?: Json | null
           distance_km?: number | null
+          external_forwarded_at?: string | null
+          external_order_id?: string | null
           id?: string
           item_price?: number
           notification_status?: string | null
@@ -373,6 +383,8 @@ export type Database = {
           product_id?: string
           source?: string | null
           total_amount?: number
+          tracking_token?: string | null
+          tracking_url?: string | null
           updated_at?: string
           vendor_confirmed_at?: string | null
           vendor_notified_at?: string | null
