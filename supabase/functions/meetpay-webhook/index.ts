@@ -1,12 +1,13 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { createHmac } from "https://deno.land/std@0.190.0/crypto/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+const ORDER_SERVICE_URL = "https://order-guardian.vercel.app";
 
 function getAdminClient() {
   return createClient(
@@ -23,7 +24,7 @@ function json(body: unknown, status = 200) {
 }
 
 /** Verify MeetPay webhook signature if secret is configured */
-function verifySignature(rawBody: string, signatureHeader: string | null): boolean {
+async function verifySignature(rawBody: string, signatureHeader: string | null): Promise<boolean> {
   const secret = Deno.env.get("MEETPAY_WEBHOOK_SECRET");
   if (!secret) {
     console.warn("MEETPAY_WEBHOOK_SECRET not set — skipping signature verification");
@@ -35,9 +36,18 @@ function verifySignature(rawBody: string, signatureHeader: string | null): boole
   }
 
   try {
-    const hmac = createHmac("sha256", secret);
-    hmac.update(rawBody);
-    const expected = hmac.digest("hex");
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const sig = await crypto.subtle.sign("HMAC", key, enc.encode(rawBody));
+    const expected = Array.from(new Uint8Array(sig))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
     // Constant-time comparison
     if (expected.length !== signatureHeader.length) return false;
     let result = 0;
@@ -140,31 +150,112 @@ async function generateLedgerEntries(admin: ReturnType<typeof getAdminClient>, o
   }
 }
 
-/** Trigger vendor notification after successful payment */
-async function triggerVendorNotification(orderId: string) {
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    
-    const res = await fetch(`${supabaseUrl}/functions/v1/notify-vendor`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${serviceRoleKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ orderId }),
-    });
+/**
+ * Forward a confirmed order to the external Order Service.
+ * - Idempotent: skips if `external_forwarded_at` is already set.
+ * - Retries up to 3 times with exponential backoff on transient failures.
+ * - Persists tracking_url / tracking_token / external_order_id on the order.
+ * Returns the tracking_url if available, otherwise null.
+ * Notifications (SMS) are now handled by the Order Service — we no longer
+ * call notify-vendor from the webhook.
+ */
+async function forwardOrderToService(
+  admin: ReturnType<typeof getAdminClient>,
+  orderId: string,
+): Promise<string | null> {
+  // Load order + product + vendor needed by the Order Service payload
+  const { data: order, error: orderErr } = await admin
+    .from("orders")
+    .select(
+      "id, external_forwarded_at, tracking_url, product_id, buyer_name, buyer_phone, delivery_address, item_price, delivery_fee, total_amount, products(name, vendor_id, vendors(phone))",
+    )
+    .eq("id", orderId)
+    .single();
 
-    if (!res.ok) {
-      const body = await res.text();
-      console.error(`[Webhook] Vendor notification failed (${res.status}):`, body);
-    } else {
-      console.log(`[Webhook] Vendor notification triggered for order ${orderId}`);
-    }
-  } catch (err) {
-    console.error("[Webhook] Vendor notification error:", err);
-    // Non-blocking: don't fail the webhook if notification fails
+  if (orderErr || !order) {
+    console.error("[OrderService] Failed to load order for forwarding:", orderErr);
+    return null;
   }
+
+  // Idempotency guard
+  if (order.external_forwarded_at) {
+    console.log(`[OrderService] Order ${orderId} already forwarded — skipping`);
+    return order.tracking_url ?? null;
+  }
+
+  const product = (order as any).products ?? {};
+  const vendor = product.vendors ?? {};
+
+  const payload = {
+    product_id: order.product_id,
+    product_name: product.name ?? "",
+    vendor_id: product.vendor_id ?? null,
+    vendor_phone: vendor.phone ?? null,
+    customer_name: order.buyer_name,
+    customer_phone: order.buyer_phone,
+    delivery_address: order.delivery_address,
+    amount: order.item_price,
+    delivery_fee: order.delivery_fee,
+    total_amount: order.total_amount,
+  };
+
+  // Use the local order id as idempotency key so retries on the Order Service
+  // side also dedupe correctly.
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Idempotency-Key": orderId,
+  };
+
+  const maxAttempts = 3;
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(`${ORDER_SERVICE_URL}/orders`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const trackingUrl = body?.tracking_url ?? null;
+        const trackingToken = body?.tracking_token ?? null;
+        const externalOrderId = body?.order_id ?? null;
+
+        await admin
+          .from("orders")
+          .update({
+            external_order_id: externalOrderId,
+            tracking_token: trackingToken,
+            tracking_url: trackingUrl,
+            external_forwarded_at: new Date().toISOString(),
+          })
+          .eq("id", orderId);
+
+        console.log(`[OrderService] Forwarded order ${orderId} → ${externalOrderId ?? "(no id)"}`);
+        return trackingUrl;
+      }
+
+      // Don't retry on 4xx (except 408/429) — those are payload problems
+      if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
+        const body = await res.text();
+        console.error(`[OrderService] ${res.status} (no retry):`, body);
+        return null;
+      }
+
+      lastErr = `HTTP ${res.status}`;
+    } catch (err) {
+      lastErr = err;
+    }
+
+    if (attempt < maxAttempts) {
+      const delay = 500 * Math.pow(2, attempt - 1); // 500ms, 1s, 2s
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+
+  console.error(`[OrderService] Failed to forward order ${orderId} after ${maxAttempts} attempts:`, lastErr);
+  return null;
 }
 
 serve(async (req) => {
@@ -183,7 +274,7 @@ serve(async (req) => {
     const signature = req.headers.get("x-meetpay-signature") 
       ?? req.headers.get("x-webhook-signature");
     
-    if (!verifySignature(rawBody, signature)) {
+    if (!(await verifySignature(rawBody, signature))) {
       console.error("Invalid webhook signature");
       return json({ error: "Invalid signature" }, 401);
     }
@@ -257,10 +348,10 @@ serve(async (req) => {
       // Generate ledger entries (idempotent internally)
       await generateLedgerEntries(admin, orderId);
 
-      // FIX: Trigger vendor notification after successful payment
-      await triggerVendorNotification(orderId);
+      // Forward to external Order Service (handles notifications/SMS itself)
+      await forwardOrderToService(admin, orderId);
 
-      console.log(`Order ${orderId} marked as paid, ledger generated, vendor notified`);
+      console.log(`Order ${orderId} marked as paid, ledger generated, forwarded to Order Service`);
       return json({ ok: true });
     }
 
