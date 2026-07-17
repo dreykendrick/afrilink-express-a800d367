@@ -23,6 +23,22 @@ function json(body: unknown, status = 200) {
   });
 }
 
+/** Compute lowercase hex HMAC-SHA256 of `body` with the given `secret`. */
+async function hmacSha256Hex(secret: string, body: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(body));
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 /** Verify MeetPay webhook signature if secret is configured */
 async function verifySignature(rawBody: string, signatureHeader: string | null): Promise<boolean> {
   const secret = Deno.env.get("MEETPAY_WEBHOOK_SECRET");
