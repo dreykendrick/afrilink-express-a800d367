@@ -23,6 +23,22 @@ function json(body: unknown, status = 200) {
   });
 }
 
+/** Compute lowercase hex HMAC-SHA256 of `body` with the given `secret`. */
+async function hmacSha256Hex(secret: string, body: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(body));
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 /** Verify MeetPay webhook signature if secret is configured */
 async function verifySignature(rawBody: string, signatureHeader: string | null): Promise<boolean> {
   const secret = Deno.env.get("MEETPAY_WEBHOOK_SECRET");
@@ -162,12 +178,13 @@ async function generateLedgerEntries(admin: ReturnType<typeof getAdminClient>, o
 async function forwardOrderToService(
   admin: ReturnType<typeof getAdminClient>,
   orderId: string,
+  paymentReference: string | null,
 ): Promise<string | null> {
   // Load order + product + vendor needed by the Order Service payload
   const { data: order, error: orderErr } = await admin
     .from("orders")
     .select(
-      "id, external_forwarded_at, tracking_url, product_id, buyer_name, buyer_phone, delivery_address, item_price, delivery_fee, total_amount, products(name, vendor_id, vendors(phone))",
+      "id, order_number, external_forwarded_at, tracking_url, product_id, buyer_name, buyer_phone, delivery_address, item_price, delivery_fee, total_amount, products(name, vendor_id, vendors(phone))",
     )
     .eq("id", orderId)
     .single();
@@ -197,12 +214,23 @@ async function forwardOrderToService(
     amount: order.item_price,
     delivery_fee: order.delivery_fee,
     total_amount: order.total_amount,
+    payment_reference: paymentReference ?? order.order_number ?? orderId,
   };
 
-  // Use the local order id as idempotency key so retries on the Order Service
-  // side also dedupe correctly.
+  const bodyStr = JSON.stringify(payload);
+
+  // Sign the exact body with HMAC-SHA256 using the shared secret.
+  const secret = Deno.env.get("ORDER_GUARDIAN_SECRET") ?? "";
+  if (!secret) {
+    console.error("[OrderService] Missing ORDER_GUARDIAN_SECRET — cannot sign request");
+    return null;
+  }
+  const signature = await hmacSha256Hex(secret, bodyStr);
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "x-checkout-signature": signature,
+    // Retained for backwards-compat / operator observability
     "Idempotency-Key": orderId,
   };
 
@@ -210,10 +238,10 @@ async function forwardOrderToService(
   let lastErr: unknown = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const res = await fetch(`${ORDER_SERVICE_URL}/orders`, {
+      const res = await fetch(`${ORDER_SERVICE_URL}/api/public/orders/create`, {
         method: "POST",
         headers,
-        body: JSON.stringify(payload),
+        body: bodyStr,
       });
 
       if (res.ok) {
@@ -292,6 +320,12 @@ serve(async (req) => {
 
     // Fallback: look up by reference (order_number)
     const reference = event?.data?.reference ?? event?.reference;
+    // MeetPay transaction id (unique per payment attempt) — used as payment_reference
+    const meetpayTxnId = event?.data?.transaction_id
+      ?? event?.data?.txn_id
+      ?? event?.data?.id
+      ?? event?.transaction_id
+      ?? null;
     if (!orderId && reference) {
       console.log(`[MeetPay Webhook] No order_id in payload, looking up by reference: ${reference}`);
       const { data: orderByRef } = await admin
@@ -349,7 +383,8 @@ serve(async (req) => {
       await generateLedgerEntries(admin, orderId);
 
       // Forward to external Order Service (handles notifications/SMS itself)
-      await forwardOrderToService(admin, orderId);
+      const paymentReference = meetpayTxnId ?? reference ?? orderId;
+      await forwardOrderToService(admin, orderId, paymentReference);
 
       console.log(`Order ${orderId} marked as paid, ledger generated, forwarded to Order Service`);
       return json({ ok: true });
