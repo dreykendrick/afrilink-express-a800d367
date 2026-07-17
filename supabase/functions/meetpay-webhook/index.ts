@@ -162,12 +162,13 @@ async function generateLedgerEntries(admin: ReturnType<typeof getAdminClient>, o
 async function forwardOrderToService(
   admin: ReturnType<typeof getAdminClient>,
   orderId: string,
+  paymentReference: string | null,
 ): Promise<string | null> {
   // Load order + product + vendor needed by the Order Service payload
   const { data: order, error: orderErr } = await admin
     .from("orders")
     .select(
-      "id, external_forwarded_at, tracking_url, product_id, buyer_name, buyer_phone, delivery_address, item_price, delivery_fee, total_amount, products(name, vendor_id, vendors(phone))",
+      "id, order_number, external_forwarded_at, tracking_url, product_id, buyer_name, buyer_phone, delivery_address, item_price, delivery_fee, total_amount, products(name, vendor_id, vendors(phone))",
     )
     .eq("id", orderId)
     .single();
@@ -197,12 +198,23 @@ async function forwardOrderToService(
     amount: order.item_price,
     delivery_fee: order.delivery_fee,
     total_amount: order.total_amount,
+    payment_reference: paymentReference ?? order.order_number ?? orderId,
   };
 
-  // Use the local order id as idempotency key so retries on the Order Service
-  // side also dedupe correctly.
+  const bodyStr = JSON.stringify(payload);
+
+  // Sign the exact body with HMAC-SHA256 using the shared secret.
+  const secret = Deno.env.get("ORDER_GUARDIAN_SECRET") ?? "";
+  if (!secret) {
+    console.error("[OrderService] Missing ORDER_GUARDIAN_SECRET — cannot sign request");
+    return null;
+  }
+  const signature = await hmacSha256Hex(secret, bodyStr);
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "x-checkout-signature": signature,
+    // Retained for backwards-compat / operator observability
     "Idempotency-Key": orderId,
   };
 
@@ -210,10 +222,10 @@ async function forwardOrderToService(
   let lastErr: unknown = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const res = await fetch(`${ORDER_SERVICE_URL}/orders`, {
+      const res = await fetch(`${ORDER_SERVICE_URL}/api/public/orders/create`, {
         method: "POST",
         headers,
-        body: JSON.stringify(payload),
+        body: bodyStr,
       });
 
       if (res.ok) {
