@@ -320,6 +320,12 @@ serve(async (req) => {
 
     // Fallback: look up by reference (order_number)
     const reference = event?.data?.reference ?? event?.reference;
+    // MeetPay transaction id (unique per payment attempt) — used as payment_reference
+    const meetpayTxnId = event?.data?.transaction_id
+      ?? event?.data?.txn_id
+      ?? event?.data?.id
+      ?? event?.transaction_id
+      ?? null;
     if (!orderId && reference) {
       console.log(`[MeetPay Webhook] No order_id in payload, looking up by reference: ${reference}`);
       const { data: orderByRef } = await admin
@@ -377,7 +383,8 @@ serve(async (req) => {
       await generateLedgerEntries(admin, orderId);
 
       // Forward to external Order Service (handles notifications/SMS itself)
-      await forwardOrderToService(admin, orderId);
+      const paymentReference = meetpayTxnId ?? reference ?? orderId;
+      await forwardOrderToService(admin, orderId, paymentReference);
 
       console.log(`Order ${orderId} marked as paid, ledger generated, forwarded to Order Service`);
       return json({ ok: true });
