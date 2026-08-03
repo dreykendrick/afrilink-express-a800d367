@@ -400,7 +400,7 @@ serve(async (req) => {
         .from("orders")
         .update({
           payment_status: "failed",
-          order_status: "failed",
+          order_status: "cancelled",
         })
         .eq("id", orderId)
         .eq("payment_status", "pending"); // Optimistic lock: only pending -> failed

@@ -1,0 +1,1 @@
+UPDATE public.orders SET meetpay_payment_id = '894db6cc-669c-4ebd-9a60-7d968692563e' WHERE id = '4670a26b-461a-4452-bdce-f2d9a32af1f7';

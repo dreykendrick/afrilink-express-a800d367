@@ -300,6 +300,7 @@ export type Database = {
           external_order_id: string | null
           id: string
           item_price: number
+          meetpay_payment_id: string | null
           notification_status: string | null
           order_number: string
           order_status: string
@@ -338,6 +339,7 @@ export type Database = {
           external_order_id?: string | null
           id?: string
           item_price: number
+          meetpay_payment_id?: string | null
           notification_status?: string | null
           order_number: string
           order_status?: string
@@ -376,6 +378,7 @@ export type Database = {
           external_order_id?: string | null
           id?: string
           item_price?: number
+          meetpay_payment_id?: string | null
           notification_status?: string | null
           order_number?: string
           order_status?: string
