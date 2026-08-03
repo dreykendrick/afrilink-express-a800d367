@@ -778,6 +778,14 @@ serve(async (req) => {
           idempotencyKey: checkout_session_id,
         });
 
+        // Persist the provider payment id so a missed webhook can be reconciled later
+        if (meetpayResult.id) {
+          await admin
+            .from("orders")
+            .update({ meetpay_payment_id: meetpayResult.id })
+            .eq("id", order!.id);
+        }
+
         return json({
           order_id: order!.id,
           order_number: order!.order_number,
