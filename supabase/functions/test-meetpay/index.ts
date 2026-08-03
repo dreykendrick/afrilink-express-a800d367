@@ -14,31 +14,29 @@ serve(async (req) => {
   const apiKey = Deno.env.get("MEETPAY_API_KEY");
   const results: any[] = [];
 
-  // Test with User-Agent header (Cloudflare often blocks without it)
-  try {
-    const r = await fetch("https://meet.briq.tz/api/v1/payments", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "Idempotency-Key": `ua-test-${Date.now()}`,
-        "User-Agent": "AfriLink-Checkout/1.0",
-        "Accept": "application/json",
-      },
-      body: JSON.stringify({
-        amount: 1000,
-        currency: "TZS",
-        type: "mobile",
-        phone: "255759340243",
-        network: "VODACOM",
-        customer: { firstname: "Test", lastname: "User", email: "test@test.com" },
-        reference: `TEST-UA-${Date.now()}`,
-      }),
+  // Read-only status lookup for a given payment id: /test-meetpay?payment_id=...
+  const paymentId = new URL(req.url).searchParams.get("payment_id");
+  if (!paymentId) {
+    return new Response(JSON.stringify({ error: "payment_id query param required" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-    const body = await r.text();
-    results.push({ test: "POST with User-Agent", status: r.status, body: body.substring(0, 500) });
-  } catch (e: any) {
-    results.push({ test: "POST with User-Agent", error: e.message });
+  }
+
+  for (const path of [`/payments/${paymentId}`, `/payments/${paymentId}/status`]) {
+    try {
+      const r = await fetch(`https://meet.briq.tz/api/v1${path}`, {
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Accept": "application/json",
+          "User-Agent": "AfriLink-Checkout/1.0",
+        },
+      });
+      const body = await r.text();
+      results.push({ path, status: r.status, body: body.substring(0, 800) });
+    } catch (e: any) {
+      results.push({ path, error: e.message });
+    }
   }
 
   return new Response(JSON.stringify({ results }, null, 2), {
