@@ -325,7 +325,7 @@ async function reconcilePendingPayment(order: {
       body: bodyStr,
     });
     console.log(`[Reconcile] Order ${order.id} → ${event.type} replayed (webhook ${res.status})`);
-    return res.ok && success;
+    return res.ok;
   } catch (err) {
     console.error("[Reconcile] Failed to replay webhook:", err);
     return false;
