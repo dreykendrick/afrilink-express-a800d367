@@ -815,7 +815,7 @@ serve(async (req) => {
     // ---- GET /receipt/:orderId ----
     if (route === "receipt" && param && req.method === "GET") {
       const admin = getAdminClient();
-      const { data: order, error } = await admin
+      let { data: order, error } = await admin
         .from("orders")
         .select("*, product:products(name, images, slug)")
         .eq("id", param)
@@ -828,6 +828,20 @@ serve(async (req) => {
       if (!order) {
         return json({ error: "Order not found" }, 404);
       }
+
+      // Webhook fallback: if payment is still pending, ask MeetPay directly.
+      if (order.payment_status === "pending" && order.meetpay_payment_id) {
+        const changed = await reconcilePendingPayment(order as any);
+        if (changed) {
+          const { data: refreshed } = await admin
+            .from("orders")
+            .select("*, product:products(name, images, slug)")
+            .eq("id", param)
+            .maybeSingle();
+          if (refreshed) order = refreshed;
+        }
+      }
+
       return json(order);
     }
 
