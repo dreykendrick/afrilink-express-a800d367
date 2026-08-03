@@ -247,6 +247,91 @@ async function initiateMeetPayPayment(params: {
   throw lastError || new Error("Payment initiation failed after retries");
 }
 
+/** Lowercase hex HMAC-SHA256 */
+async function hmacSha256Hex(secret: string, body: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(body));
+  return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Fetch a payment's current status from MeetPay */
+async function fetchMeetPayPayment(paymentId: string): Promise<any | null> {
+  const apiKey = Deno.env.get("MEETPAY_API_KEY");
+  if (!apiKey) return null;
+  try {
+    const res = await fetch(`${MEETPAY_BASE_URL}/payments/${encodeURIComponent(paymentId)}`, {
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    });
+    if (!res.ok) {
+      console.warn(`[MeetPay Poll] ${res.status} for payment ${paymentId}`);
+      return null;
+    }
+    const data = await res.json();
+    return data?.data ?? data;
+  } catch (err) {
+    console.error("[MeetPay Poll] Network error:", err);
+    return null;
+  }
+}
+
+/**
+ * Fallback for missed MeetPay webhooks: poll the payment status and, when it is
+ * terminal, replay the event into the meetpay-webhook function (properly signed)
+ * so all downstream logic (ledger, Order Service forwarding) runs exactly once.
+ */
+async function reconcilePendingPayment(order: {
+  id: string;
+  order_number: string;
+  payment_status: string;
+  meetpay_payment_id: string | null;
+}): Promise<boolean> {
+  if (order.payment_status !== "pending" || !order.meetpay_payment_id) return false;
+
+  const payment = await fetchMeetPayPayment(order.meetpay_payment_id);
+  const status = String(payment?.status ?? "").toLowerCase();
+  if (!status) return false;
+
+  const success = ["success", "successful", "completed", "paid", "confirmed"].includes(status);
+  const failed = ["failed", "cancelled", "canceled", "expired", "rejected"].includes(status);
+  if (!success && !failed) return false;
+
+  const event = {
+    type: success ? "payment.completed" : "payment.failed",
+    data: {
+      id: order.meetpay_payment_id,
+      transaction_id: payment?.transaction_id ?? payment?.reference ?? order.meetpay_payment_id,
+      reference: order.order_number,
+      status,
+      metadata: { order_id: order.id, order_number: order.order_number },
+    },
+  };
+  const bodyStr = JSON.stringify(event);
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const secret = Deno.env.get("MEETPAY_WEBHOOK_SECRET");
+  if (secret) headers["x-meetpay-signature"] = await hmacSha256Hex(secret, bodyStr);
+
+  try {
+    const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/meetpay-webhook`, {
+      method: "POST",
+      headers,
+      body: bodyStr,
+    });
+    console.log(`[Reconcile] Order ${order.id} → ${event.type} replayed (webhook ${res.status})`);
+    return res.ok && success;
+  } catch (err) {
+    console.error("[Reconcile] Failed to replay webhook:", err);
+    return false;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
