@@ -149,12 +149,16 @@ async function initiateMeetPayPayment(params: {
 
   const network = detectNetwork(params.phone);
 
+  const callbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/meetpay-webhook`;
+
   const body = {
     amount: params.amount,
     currency: "TZS",
     type: "mobile",
     phone: params.phone,
     network,
+    callback_url: callbackUrl,
+    webhook_url: callbackUrl,
     customer: {
       firstname,
       lastname,
