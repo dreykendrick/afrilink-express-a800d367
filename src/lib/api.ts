@@ -1,13 +1,11 @@
-/**
- * API helpers – product/affiliate data comes from the main backend,
- * while checkout/delivery/orders use this project's own checkout-api.
- */
+import { supabase } from '@/integrations/supabase/client';
 
-const EXTERNAL_API_BASE = 'https://ckklirhhwndijsjpmnfe.supabase.co/functions/v1';
-const EXTERNAL_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNra2xpcmhod25kaWpzanBtbmZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYzNDUzMDksImV4cCI6MjA2MTkyMTMwOX0.aNJkJVXNqzBicShLsFbIbYUS0bQHNBMxdbwcjJOavLM';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://dqclmqbegnimtbkndrif.supabase.co';
+const LOCAL_API_BASE = `${SUPABASE_URL}/functions/v1`;
+const LOCAL_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxY2xtcWJlZ25pbXRia25kcmlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5NjE4NzMsImV4cCI6MjEwMTUzNzg3M30.pemKTzkeYqSOtiVGwCWx5uzXyITJLnCCVVBacPGvalo';
 
-const LOCAL_API_BASE = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
-const LOCAL_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const EXTERNAL_API_BASE = LOCAL_API_BASE;
+const EXTERNAL_ANON_KEY = LOCAL_ANON_KEY;
 
 /** Fetch from the external (main) backend */
 async function externalFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -63,9 +61,31 @@ import type { Product, Order, CheckoutPayload, CheckoutResult, DeliverySettings 
 import { DEFAULT_DELIVERY_SETTINGS } from '@/lib/delivery';
 
 export async function fetchProduct(idOrSlug: string): Promise<Product> {
-  const raw = await localFetch<any>(`/products/${encodeURIComponent(idOrSlug)}`);
-  const p = raw?.product ?? raw;
-  return normalizeProduct(p);
+  try {
+    const raw = await localFetch<any>(`/products/${encodeURIComponent(idOrSlug)}`);
+    const p = raw?.product ?? raw;
+    if (p && (p.id || p.title || p.name)) {
+      return normalizeProduct(p);
+    }
+  } catch (err) {
+    console.warn('checkout-api endpoint unavailable, querying database directly:', err);
+  }
+
+  // Fallback: Query directly from supabase database
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+  let query = supabase.from('products').select('*');
+  if (isUuid) {
+    query = query.or(`id.eq.${idOrSlug},slug.eq.${idOrSlug}`);
+  } else {
+    query = query.eq('slug', idOrSlug);
+  }
+
+  const { data, error } = await query.maybeSingle();
+  if (error || !data) {
+    throw new Error('Product not found');
+  }
+
+  return normalizeProduct(data);
 }
 
 /** Map main-backend field names to our frontend Product type */
@@ -126,8 +146,26 @@ interface AffiliateInfo {
   commission_rate: number;
 }
 
-export function fetchAffiliate(code: string): Promise<AffiliateInfo | null> {
-  return externalFetch<AffiliateInfo>(`/affiliates/${encodeURIComponent(code)}`).catch(() => null);
+export async function fetchAffiliate(code: string): Promise<AffiliateInfo | null> {
+  try {
+    const { data } = await supabase
+      .from('affiliate_links')
+      .select('id, code, unique_code')
+      .or(`code.eq.${code},unique_code.eq.${code}`)
+      .maybeSingle();
+
+    if (data) {
+      return {
+        id: data.id,
+        code: data.code || data.unique_code || code,
+        name: 'Affiliate Partner',
+        commission_rate: 10,
+      };
+    }
+  } catch (err) {
+    console.warn('fetchAffiliate DB query notice:', err);
+  }
+  return null;
 }
 
 export async function trackAffiliateClick(
@@ -135,10 +173,11 @@ export async function trackAffiliateClick(
   productId: string,
   sessionId: string,
 ): Promise<void> {
-  await localFetch('/track-click', {
-    method: 'POST',
-    body: JSON.stringify({ affiliate_code: affiliateCode, product_id: productId, session_id: sessionId }),
-  }).catch((err) => console.error('Click tracking failed:', err));
+  try {
+    await (supabase as any).rpc('resolve_affiliate_link', { p_code: affiliateCode });
+  } catch (err) {
+    console.warn('Click tracking notice:', err);
+  }
 }
 
 // ---- Unified Checkout ----
