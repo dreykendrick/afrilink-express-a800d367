@@ -61,6 +61,41 @@ import type { Product, Order, CheckoutPayload, CheckoutResult, DeliverySettings 
 import { DEFAULT_DELIVERY_SETTINGS } from '@/lib/delivery';
 
 export async function fetchProduct(idOrSlug: string): Promise<Product> {
+  // Query directly from supabase database (most reliable path)
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+
+  // Use raw fetch to bypass typed schema constraints
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://dqclmqbegnimtbkndrif.supabase.co';
+  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || LOCAL_ANON_KEY;
+
+  let queryUrl = `${supabaseUrl}/rest/v1/products?select=*`;
+  if (isUuid) {
+    queryUrl += `&or=(id.eq.${idOrSlug},slug.eq.${idOrSlug})`;
+  } else {
+    queryUrl += `&slug=eq.${idOrSlug}`;
+  }
+  queryUrl += `&status=neq.rejected&limit=1`;
+
+  try {
+    const res = await fetch(queryUrl, {
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (res.ok) {
+      const rows = await res.json();
+      if (Array.isArray(rows) && rows.length > 0) {
+        return normalizeProduct(rows[0]);
+      }
+    }
+  } catch (err) {
+    console.warn('Direct DB query failed, trying edge function:', err);
+  }
+
+  // Fallback: try edge function
   try {
     const raw = await localFetch<any>(`/products/${encodeURIComponent(idOrSlug)}`);
     const p = raw?.product ?? raw;
@@ -68,24 +103,10 @@ export async function fetchProduct(idOrSlug: string): Promise<Product> {
       return normalizeProduct(p);
     }
   } catch (err) {
-    console.warn('checkout-api endpoint unavailable, querying database directly:', err);
+    console.warn('checkout-api endpoint also failed:', err);
   }
 
-  // Fallback: Query directly from supabase database
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
-  let query = supabase.from('products').select('*');
-  if (isUuid) {
-    query = query.or(`id.eq.${idOrSlug},slug.eq.${idOrSlug}`);
-  } else {
-    query = query.eq('slug', idOrSlug);
-  }
-
-  const { data, error } = await query.maybeSingle();
-  if (error || !data) {
-    throw new Error('Product not found');
-  }
-
-  return normalizeProduct(data);
+  throw new Error('Product not found');
 }
 
 /** Map main-backend field names to our frontend Product type */

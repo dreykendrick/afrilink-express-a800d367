@@ -3,9 +3,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const MEETPAY_BASE_URL = "https://meet.briq.tz/api/v1";
 
-// External (main) backend for product lookups
-const EXTERNAL_SUPABASE_URL = "https://ckklirhhwndijsjpmnfe.supabase.co";
-const EXTERNAL_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNra2xpcmhod25kaWpzanBtbmZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYzNDUzMDksImV4cCI6MjA2MTkyMTMwOX0.aNJkJVXNqzBicShLsFbIbYUS0bQHNBMxdbwcjJOavLM";
+// External (main) backend for product lookups — now same project
+const EXTERNAL_SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "https://dqclmqbegnimtbkndrif.supabase.co";
+const EXTERNAL_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxY2xtcWJlZ25pbXRia25kcmlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5NjE4NzMsImV4cCI6MjEwMTUzNzg3M30.pemKTzkeYqSOtiVGwCWx5uzXyITJLnCCVVBacPGvalo";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,7 +17,7 @@ const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const PUBLIC_PRODUCT_FIELDS =
-  "id, vendor_id, slug, name, price, description, short_description, images, is_active, created_at, updated_at";
+  "id, vendor_id, slug, title, price, commission, category, description, image_url, image_urls, status, is_available, created_at, updated_at";
 
 const EARTH_RADIUS_KM = 6371;
 
@@ -351,9 +351,9 @@ serve(async (req) => {
 
       const { data, error } = await admin
         .from("products")
-        .select(`${PUBLIC_PRODUCT_FIELDS}, vendor:vendors(lat, lng, address)`)
+        .select(PUBLIC_PRODUCT_FIELDS)
         .eq(column, param)
-        .eq("is_active", true)
+        .neq("status", "rejected")
         .maybeSingle();
 
       if (error) {
@@ -362,11 +362,17 @@ serve(async (req) => {
       }
 
       if (data) {
-        const vendor_lat = (data as any).vendor?.lat ?? null;
-        const vendor_lng = (data as any).vendor?.lng ?? null;
-        const vendor_address = (data as any).vendor?.address ?? null;
-        const { vendor, ...rest } = data as any;
-        return json({ ...rest, vendor_lat, vendor_lng, vendor_address });
+        // Normalize field names for the frontend
+        const normalized = {
+          ...(data as any),
+          name: (data as any).title || (data as any).name || "",
+          images: (data as any).image_urls || ((data as any).image_url ? [(data as any).image_url] : []),
+          is_active: (data as any).is_available !== false,
+          vendor_lat: null,
+          vendor_lng: null,
+          vendor_address: null,
+        };
+        return json(normalized);
       }
 
       // Fallback: fetch from external backend and sync locally
@@ -537,13 +543,13 @@ serve(async (req) => {
       let product: any = null;
       const { data: localProduct, error: prodErr } = await admin
         .from("products")
-        .select("id, price, vendor_id, vendor:vendors(lat, lng, address)")
+        .select("id, price, vendor_id")
         .eq("id", product_id)
-        .eq("is_active", true)
+        .neq("status", "rejected")
         .maybeSingle();
 
       if (localProduct) {
-        product = localProduct;
+        product = { ...localProduct, vendor: { lat: null, lng: null, address: null } };
       } else {
         // Fallback: fetch from external backend via its checkout-api edge function
         console.log("[checkout] Product not found locally, trying external API...");
@@ -817,7 +823,7 @@ serve(async (req) => {
       const admin = getAdminClient();
       let { data: order, error } = await admin
         .from("orders")
-        .select("*, product:products(name, images, slug)")
+        .select("*, product:products(title, image_urls, slug)")
         .eq("id", param)
         .maybeSingle();
 
@@ -835,7 +841,7 @@ serve(async (req) => {
         if (changed) {
           const { data: refreshed } = await admin
             .from("orders")
-            .select("*, product:products(name, images, slug)")
+            .select("*, product:products(title, image_urls, slug)")
             .eq("id", param)
             .maybeSingle();
           if (refreshed) order = refreshed;
@@ -929,7 +935,7 @@ serve(async (req) => {
         .from("orders")
         .update(updateData)
         .eq("id", order_id)
-        .select("*, product:products(name, images, slug)")
+        .select("*, product:products(title, image_urls, slug)")
         .single();
 
       if (updateErr) {
