@@ -5,11 +5,10 @@ import type { Database } from './types';
 const HARDCODED_SUPABASE_URL = 'https://dqclmqbegnimtbkndrif.supabase.co';
 const HARDCODED_PUBLISHABLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxY2xtcWJlZ25pbXRia25kcmlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5NjE4NzMsImV4cCI6MjEwMTUzNzg3M30.pemKTzkeYqSOtiVGwCWx5uzXyITJLnCCVVBacPGvalo';
 
-const rawUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const rawKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
-
-const SUPABASE_URL = (rawUrl && !rawUrl.includes('ojcvtfwuscitrrhloqhu') && !rawUrl.includes('ckklirhhwndijsjpmnfe')) ? rawUrl : HARDCODED_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = (rawKey && !rawKey.includes('ojcvtfwuscitrrhloqhu') && !rawKey.includes('ckklirhhwndijsjpmnfe')) ? rawKey : HARDCODED_PUBLISHABLE_KEY;
+// The two Winger applications share this one backend. Keeping the URL/key pair
+// canonical prevents stale Vercel variables from selecting a legacy project.
+const SUPABASE_URL = HARDCODED_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = HARDCODED_PUBLISHABLE_KEY;
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
