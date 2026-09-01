@@ -3,10 +3,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const MEETPAY_BASE_URL = "https://meet.briq.tz/api/v1";
 
-// External (main) backend for product lookups — now same project
-const EXTERNAL_SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "https://dqclmqbegnimtbkndrif.supabase.co";
-const EXTERNAL_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxY2xtcWJlZ25pbXRia25kcmlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5NjE4NzMsImV4cCI6MjEwMTUzNzg3M30.pemKTzkeYqSOtiVGwCWx5uzXyITJLnCCVVBacPGvalo";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -17,7 +13,7 @@ const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const PUBLIC_PRODUCT_FIELDS =
-  "id, vendor_id, slug, title, price, commission, category, description, image_url, image_urls, status, is_available, created_at, updated_at";
+  "id, vendor_id, slug, title, price, commission, category, image_url, image_urls, status, is_available";
 
 const EARTH_RADIUS_KM = 6371;
 
@@ -346,15 +342,20 @@ serve(async (req) => {
     // ---- GET /products/:idOrSlug ----
     if (route === "products" && param && req.method === "GET") {
       const admin = getAdminClient();
-      const isUUID = UUID_REGEX.test(param);
-      const column = isUUID ? "id" : "slug";
-
-      const { data, error } = await admin
+      const decoded = decodeURIComponent(param).trim();
+      const normalizedSlug = decoded.replace(/\s+/g, "-");
+      const isUUID = UUID_REGEX.test(decoded);
+      let productQuery = admin
         .from("products")
         .select(PUBLIC_PRODUCT_FIELDS)
-        .eq(column, param)
-        .neq("status", "rejected")
-        .maybeSingle();
+        .eq("status", "approved")
+        .eq("is_available", true);
+
+      productQuery = isUUID
+        ? productQuery.or(`id.eq.${decoded},slug.eq.${decoded},slug.eq.${normalizedSlug}`)
+        : productQuery.in("slug", [...new Set([decoded, normalizedSlug])]);
+
+      const { data, error } = await productQuery.limit(1).maybeSingle();
 
       if (error) {
         console.error("Product lookup error:", error);
@@ -365,9 +366,13 @@ serve(async (req) => {
         // Normalize field names for the frontend
         const normalized = {
           ...(data as any),
-          name: (data as any).title || (data as any).name || "",
+          name: (data as any).title || "",
+          description: null,
+          short_description: null,
           images: (data as any).image_urls || ((data as any).image_url ? [(data as any).image_url] : []),
           is_active: (data as any).is_available !== false,
+          created_at: "",
+          updated_at: "",
           vendor_lat: null,
           vendor_lng: null,
           vendor_address: null,
@@ -375,106 +380,36 @@ serve(async (req) => {
         return json(normalized);
       }
 
-      // Fallback: fetch from external backend and sync locally
-      console.log(`[products] Not found locally (${column}=${param}), trying external API...`);
-      try {
-        const extRes = await fetch(`${EXTERNAL_SUPABASE_URL}/functions/v1/checkout-api/products/${encodeURIComponent(param)}`, {
-          headers: { "apikey": EXTERNAL_ANON_KEY, "Content-Type": "application/json" },
-        });
-        if (!extRes.ok) {
-          console.error(`[products] External lookup failed: ${extRes.status}`);
-          return json({ error: "Product not found" }, 404);
-        }
-        const extRaw = await extRes.json();
-        const ext = extRaw?.product ?? extRaw;
-
-        // Sync vendor + product to local DB
-        const vendorId = ext.vendor_id || ext.id;
-        await admin.from("vendors").upsert({
-          id: vendorId,
-          name: ext.vendor_name || "External Vendor",
-          phone: ext.vendor_phone || "0000000000",
-          lat: ext.vendor_lat ?? null,
-          lng: ext.vendor_lng ?? null,
-          address: ext.vendor_address ?? null,
-        }, { onConflict: "id" });
-
-        await admin.from("products").upsert({
-          id: ext.id,
-          vendor_id: vendorId,
-          name: ext.title || ext.name || "Product",
-          slug: ext.slug || ext.id,
-          price: ext.price,
-          description: ext.description || null,
-          short_description: ext.short_description || null,
-          images: ext.image_urls || ext.images || (ext.image_url ? [ext.image_url] : []),
-          is_active: true,
-        }, { onConflict: "id" });
-
-        console.log(`[products] Synced external product ${ext.id} to local DB`);
-        return json({
-          id: ext.id,
-          vendor_id: vendorId,
-          slug: ext.slug || ext.id,
-          name: ext.title || ext.name || "Product",
-          price: ext.price,
-          description: ext.description || null,
-          short_description: ext.short_description || null,
-          images: ext.image_urls || ext.images || (ext.image_url ? [ext.image_url] : []),
-          is_active: true,
-          created_at: ext.created_at || new Date().toISOString(),
-          updated_at: ext.updated_at || new Date().toISOString(),
-          vendor_lat: ext.vendor_lat ?? null,
-          vendor_lng: ext.vendor_lng ?? null,
-          vendor_address: ext.vendor_address ?? null,
-        });
-      } catch (extErr) {
-        console.error("[products] External product fetch error:", extErr);
-        return json({ error: "Product not found" }, 404);
-      }
+      return json({ error: "Product not found" }, 404);
     }
 
     // ---- GET /affiliates/:code ----
     if (route === "affiliates" && param && req.method === "GET") {
       const admin = getAdminClient();
       const { data, error } = await admin
-        .from("affiliates")
-        .select("id, code, name, commission_rate")
+        .from("affiliate_links")
+        .select("affiliate_id, code, product_id")
         .eq("code", param)
-        .eq("is_active", true)
         .maybeSingle();
 
       if (error) {
         console.error("Affiliate lookup error:", error);
         return json({ error: "Unable to load affiliate" }, 500);
       }
-      if (data) return json(data);
+      if (!data) return json({ error: "Affiliate not found" }, 404);
 
-      // Fallback: fetch from external backend and sync
-      console.log(`[affiliates] Not found locally (code=${param}), trying external API...`);
-      try {
-        const extRes = await fetch(`${EXTERNAL_SUPABASE_URL}/functions/v1/checkout-api/affiliates/${encodeURIComponent(param)}`, {
-          headers: { "apikey": EXTERNAL_ANON_KEY, "Content-Type": "application/json" },
-        });
-        if (!extRes.ok) return json({ error: "Affiliate not found" }, 404);
-        const extAff = await extRes.json();
-        if (extAff?.id) {
-          await admin.from("affiliates").upsert({
-            id: extAff.id,
-            code: extAff.code || param,
-            name: extAff.name || "External Affiliate",
-            phone: extAff.phone || null,
-            commission_rate: extAff.commission_rate ?? 0.05,
-            is_active: true,
-          }, { onConflict: "id" });
-          console.log(`[affiliates] Synced external affiliate ${extAff.id}`);
-          return json({ id: extAff.id, code: extAff.code || param, name: extAff.name, commission_rate: extAff.commission_rate });
-        }
-        return json({ error: "Affiliate not found" }, 404);
-      } catch (extErr) {
-        console.error("[affiliates] External fetch error:", extErr);
-        return json({ error: "Affiliate not found" }, 404);
-      }
+      const { data: linkedProduct } = await admin
+        .from("products")
+        .select("commission")
+        .eq("id", data.product_id)
+        .maybeSingle();
+
+      return json({
+        id: data.affiliate_id,
+        code: data.code || param,
+        name: "Affiliate Partner",
+        commission_rate: Number(linkedProduct?.commission ?? 0) / 100,
+      });
     }
 
     // ---- GET /delivery-settings ----
@@ -497,12 +432,11 @@ serve(async (req) => {
 
       if (!affiliate_id && affiliate_code) {
         const { data: aff } = await admin
-          .from("affiliates")
-          .select("id")
+          .from("affiliate_links")
+          .select("affiliate_id")
           .eq("code", affiliate_code)
-          .eq("is_active", true)
           .maybeSingle();
-        if (aff) affiliate_id = aff.id;
+        if (aff) affiliate_id = aff.affiliate_id;
       }
 
       if (!affiliate_id) {
@@ -539,79 +473,37 @@ serve(async (req) => {
 
       const admin = getAdminClient();
 
-      // Look up product + vendor coordinates (local DB first, then external)
-      let product: any = null;
+      // Products and vendor profiles live in the same shared Supabase project.
       const { data: localProduct, error: prodErr } = await admin
         .from("products")
-        .select("id, price, vendor_id")
+        .select("id, price, commission, vendor_id")
         .eq("id", product_id)
-        .neq("status", "rejected")
+        .eq("status", "approved")
+        .eq("is_available", true)
         .maybeSingle();
 
-      if (localProduct) {
-        product = { ...localProduct, vendor: { lat: null, lng: null, address: null } };
-      } else {
-        // Fallback: fetch from external backend via its checkout-api edge function
-        console.log("[checkout] Product not found locally, trying external API...");
-        try {
-          const extRes = await fetch(`${EXTERNAL_SUPABASE_URL}/functions/v1/checkout-api/products/${product_id}`, {
-            headers: {
-              "apikey": EXTERNAL_ANON_KEY,
-              "Content-Type": "application/json",
-            },
-          });
-          if (!extRes.ok) {
-            console.error(`[checkout] External product lookup failed: ${extRes.status}`);
-            return json({ error: "Product not found" }, 404);
-          }
-          const extRaw = await extRes.json();
-          // External API may wrap in {success, product} or return flat
-          const extProduct = extRaw?.product ?? extRaw;
-          product = {
-            id: extProduct.id,
-            price: extProduct.price,
-            vendor_id: extProduct.vendor_id,
-            vendor: {
-              lat: extProduct.vendor_lat ?? null,
-              lng: extProduct.vendor_lng ?? null,
-              address: extProduct.vendor_address ?? null,
-            },
-          };
-          console.log("[checkout] External product resolved:", JSON.stringify({ id: product.id, price: product.price, vendor: product.vendor }));
-
-          // Sync vendor + product to local DB so FK constraint is satisfied
-          const vendorId = extProduct.vendor_id || product.vendor_id || product.id;
-          const vendorName = extProduct.vendor_name || "External Vendor";
-          const vendorPhone = "0000000000";
-          
-          // Upsert vendor
-          await admin.from("vendors").upsert({
-            id: vendorId,
-            name: vendorName,
-            phone: vendorPhone,
-            lat: product.vendor.lat,
-            lng: product.vendor.lng,
-            address: product.vendor.address,
-          }, { onConflict: "id" });
-
-          // Upsert product
-          await admin.from("products").upsert({
-            id: product.id,
-            vendor_id: vendorId,
-            name: extProduct.title || extProduct.name || "External Product",
-            slug: extProduct.slug || product.id,
-            price: product.price,
-            description: extProduct.description || null,
-            images: extProduct.image_urls || (extProduct.image_url ? [extProduct.image_url] : []),
-            is_active: true,
-          }, { onConflict: "id" });
-
-          console.log("[checkout] Synced external product + vendor to local DB");
-        } catch (extErr) {
-          console.error("[checkout] External product fetch error:", extErr);
-          return json({ error: "Product not found" }, 404);
-        }
+      if (prodErr) {
+        console.error("Checkout product lookup error:", prodErr);
+        return json({ error: "Unable to load product" }, 500);
       }
+      if (!localProduct) return json({ error: "Product not found" }, 404);
+
+      const { data: vendorProfile, error: vendorError } = await admin
+        .from("vendor_profiles")
+        .select("vendor_lat, vendor_lng, vendor_address, pickup_location")
+        .eq("user_id", localProduct.vendor_id)
+        .maybeSingle();
+
+      if (vendorError) console.error("Vendor profile lookup error:", vendorError);
+
+      const product = {
+        ...localProduct,
+        vendor: {
+          lat: vendorProfile?.vendor_lat ?? null,
+          lng: vendorProfile?.vendor_lng ?? null,
+          address: vendorProfile?.vendor_address ?? vendorProfile?.pickup_location ?? null,
+        },
+      };
 
       const vendorLat = product.vendor?.lat ?? null;
       const vendorLng = product.vendor?.lng ?? null;
@@ -645,45 +537,15 @@ serve(async (req) => {
       let affiliate_rate_at_purchase: number | null = null;
 
       if (source === "affiliate_link" && affiliate_ref) {
-        // Check local DB first
         const { data: aff } = await admin
-          .from("affiliates")
-          .select("id, commission_rate")
+          .from("affiliate_links")
+          .select("affiliate_id")
+          .eq("product_id", product_id)
           .eq("code", affiliate_ref)
-          .eq("is_active", true)
           .maybeSingle();
         if (aff) {
-          affiliate_id = aff.id;
-          affiliate_rate_at_purchase = aff.commission_rate;
-        } else {
-          // Fallback: fetch from external backend and sync
-          console.log(`[checkout] Affiliate "${affiliate_ref}" not found locally, trying external API...`);
-          try {
-            const extAffRes = await fetch(`${EXTERNAL_SUPABASE_URL}/functions/v1/checkout-api/affiliates/${encodeURIComponent(affiliate_ref)}`, {
-              headers: { "apikey": EXTERNAL_ANON_KEY, "Content-Type": "application/json" },
-            });
-            if (extAffRes.ok) {
-              const extAff = await extAffRes.json();
-              if (extAff?.id) {
-                // Sync affiliate to local DB
-                await admin.from("affiliates").upsert({
-                  id: extAff.id,
-                  code: extAff.code || affiliate_ref,
-                  name: extAff.name || "External Affiliate",
-                  phone: extAff.phone || null,
-                  commission_rate: extAff.commission_rate ?? 0.05,
-                  is_active: true,
-                }, { onConflict: "id" });
-                affiliate_id = extAff.id;
-                affiliate_rate_at_purchase = extAff.commission_rate ?? 0.05;
-                console.log(`[checkout] Synced external affiliate ${extAff.id} (code=${extAff.code})`);
-              }
-            } else {
-              console.warn(`[checkout] External affiliate lookup failed: ${extAffRes.status}`);
-            }
-          } catch (affErr) {
-            console.warn("[checkout] External affiliate fetch error:", affErr);
-          }
+          affiliate_id = aff.affiliate_id;
+          affiliate_rate_at_purchase = Number(localProduct.commission ?? 0) / 100;
         }
       }
 
