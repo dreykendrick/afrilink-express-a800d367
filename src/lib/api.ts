@@ -1,8 +1,12 @@
-import { supabase } from '@/integrations/supabase/client';
+const HARDCODED_URL = 'https://dqclmqbegnimtbkndrif.supabase.co';
+const HARDCODED_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxY2xtcWJlZ25pbXRia25kcmlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5NjE4NzMsImV4cCI6MjEwMTUzNzg3M30.pemKTzkeYqSOtiVGwCWx5uzXyITJLnCCVVBacPGvalo';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://dqclmqbegnimtbkndrif.supabase.co';
+const envUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const envKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+
+const SUPABASE_URL = (envUrl && !envUrl.includes('ojcvtfwuscitrrhloqhu') && !envUrl.includes('ckklirhhwndijsjpmnfe')) ? envUrl : HARDCODED_URL;
+const LOCAL_ANON_KEY = (envKey && !envKey.includes('ojcvtfwuscitrrhloqhu') && !envKey.includes('ckklirhhwndijsjpmnfe')) ? envKey : HARDCODED_KEY;
 const LOCAL_API_BASE = `${SUPABASE_URL}/functions/v1`;
-const LOCAL_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxY2xtcWJlZ25pbXRia25kcmlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5NjE4NzMsImV4cCI6MjEwMTUzNzg3M30.pemKTzkeYqSOtiVGwCWx5uzXyITJLnCCVVBacPGvalo';
 
 const EXTERNAL_API_BASE = LOCAL_API_BASE;
 const EXTERNAL_ANON_KEY = LOCAL_ANON_KEY;
