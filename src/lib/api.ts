@@ -65,18 +65,18 @@ import type { Product, Order, CheckoutPayload, CheckoutResult, DeliverySettings 
 import { DEFAULT_DELIVERY_SETTINGS } from '@/lib/delivery';
 
 export async function fetchProduct(idOrSlug: string): Promise<Product> {
-  // Query directly from supabase database (most reliable path)
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+  const decoded = decodeURIComponent(idOrSlug).trim();
+  const normalizedSlug = decoded.replace(/\s+/g, '-');
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decoded);
 
-  // Use raw fetch to bypass typed schema constraints
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://dqclmqbegnimtbkndrif.supabase.co';
-  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || LOCAL_ANON_KEY;
+  const supabaseUrl = 'https://dqclmqbegnimtbkndrif.supabase.co';
+  const supabaseKey = LOCAL_ANON_KEY;
 
   let queryUrl = `${supabaseUrl}/rest/v1/products?select=*`;
   if (isUuid) {
-    queryUrl += `&or=(id.eq.${idOrSlug},slug.eq.${idOrSlug})`;
+    queryUrl += `&or=(id.eq.${decoded},slug.eq.${encodeURIComponent(decoded)},slug.eq.${encodeURIComponent(normalizedSlug)})`;
   } else {
-    queryUrl += `&slug=eq.${idOrSlug}`;
+    queryUrl += `&or=(slug.eq.${encodeURIComponent(decoded)},slug.eq.${encodeURIComponent(normalizedSlug)})`;
   }
   queryUrl += `&status=neq.rejected&limit=1`;
 
