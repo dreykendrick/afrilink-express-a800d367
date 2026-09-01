@@ -1,36 +1,15 @@
+import { supabase } from '@/integrations/supabase/client';
+import { DEFAULT_DELIVERY_SETTINGS } from '@/lib/delivery';
+import type { Product, Order, CheckoutPayload, CheckoutResult, DeliverySettings } from '@/lib/types';
+
 const HARDCODED_URL = 'https://dqclmqbegnimtbkndrif.supabase.co';
 const HARDCODED_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxY2xtcWJlZ25pbXRia25kcmlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5NjE4NzMsImV4cCI6MjEwMTUzNzg3M30.pemKTzkeYqSOtiVGwCWx5uzXyITJLnCCVVBacPGvalo';
 
-const envUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const envKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
-
-const SUPABASE_URL = (envUrl && !envUrl.includes('ojcvtfwuscitrrhloqhu') && !envUrl.includes('ckklirhhwndijsjpmnfe')) ? envUrl : HARDCODED_URL;
-const LOCAL_ANON_KEY = (envKey && !envKey.includes('ojcvtfwuscitrrhloqhu') && !envKey.includes('ckklirhhwndijsjpmnfe')) ? envKey : HARDCODED_KEY;
+// This storefront is intentionally coupled to the shared Winger Supabase project.
+// Do not allow stale Vercel variables to mix a legacy URL/key with this backend.
+const SUPABASE_URL = HARDCODED_URL;
+const LOCAL_ANON_KEY = HARDCODED_KEY;
 const LOCAL_API_BASE = `${SUPABASE_URL}/functions/v1`;
-
-const EXTERNAL_API_BASE = LOCAL_API_BASE;
-const EXTERNAL_ANON_KEY = LOCAL_ANON_KEY;
-
-/** Fetch from the external (main) backend */
-async function externalFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${EXTERNAL_API_BASE}/checkout-api${path}`, {
-    ...options,
-    headers: {
-      'apikey': EXTERNAL_ANON_KEY,
-      'Content-Type': 'application/json',
-      ...(options?.headers || {}),
-    },
-  });
-
-  if (res.status === 404) throw new Error('Not found');
-  if (!res.ok) {
-    const text = await res.text();
-    console.error(`External API error ${res.status}:`, text);
-    throw new Error(res.status === 403 ? 'Permission denied' : 'Request failed');
-  }
-
-  return res.json();
-}
 
 /** Fetch from this project's own checkout-api */
 async function localFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -61,30 +40,27 @@ async function localFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
 // ---- Product ----
 
-import type { Product, Order, CheckoutPayload, CheckoutResult, DeliverySettings } from '@/lib/types';
-import { DEFAULT_DELIVERY_SETTINGS } from '@/lib/delivery';
-
 export async function fetchProduct(idOrSlug: string): Promise<Product> {
   const decoded = decodeURIComponent(idOrSlug).trim();
   const normalizedSlug = decoded.replace(/\s+/g, '-');
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decoded);
 
-  const supabaseUrl = 'https://dqclmqbegnimtbkndrif.supabase.co';
-  const supabaseKey = LOCAL_ANON_KEY;
-
-  let queryUrl = `${supabaseUrl}/rest/v1/products?select=*`;
+  const queryUrl = new URL(`${SUPABASE_URL}/rest/v1/products`);
+  queryUrl.searchParams.set('select', '*');
   if (isUuid) {
-    queryUrl += `&or=(id.eq.${decoded},slug.eq.${encodeURIComponent(decoded)},slug.eq.${encodeURIComponent(normalizedSlug)})`;
+    queryUrl.searchParams.set('or', `(id.eq.${decoded},slug.eq.${decoded},slug.eq.${normalizedSlug})`);
   } else {
-    queryUrl += `&or=(slug.eq.${encodeURIComponent(decoded)},slug.eq.${encodeURIComponent(normalizedSlug)})`;
+    queryUrl.searchParams.set('or', `(slug.eq.${decoded},slug.eq.${normalizedSlug})`);
   }
-  queryUrl += `&status=neq.rejected&limit=1`;
+  queryUrl.searchParams.set('status', 'eq.approved');
+  queryUrl.searchParams.set('is_available', 'eq.true');
+  queryUrl.searchParams.set('limit', '1');
 
   try {
-    const res = await fetch(queryUrl, {
+    const res = await fetch(queryUrl.toString(), {
       headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
+        'apikey': LOCAL_ANON_KEY,
+        'Authorization': `Bearer ${LOCAL_ANON_KEY}`,
         'Accept': 'application/json',
       },
     });
@@ -101,7 +77,7 @@ export async function fetchProduct(idOrSlug: string): Promise<Product> {
 
   // Fallback: try edge function
   try {
-    const raw = await localFetch<any>(`/products/${encodeURIComponent(idOrSlug)}`);
+    const raw = await localFetch<any>(`/products/${encodeURIComponent(normalizedSlug)}`);
     const p = raw?.product ?? raw;
     if (p && (p.id || p.title || p.name)) {
       return normalizeProduct(p);
@@ -175,14 +151,14 @@ export async function fetchAffiliate(code: string): Promise<AffiliateInfo | null
   try {
     const { data } = await supabase
       .from('affiliate_links')
-      .select('id, code, unique_code')
-      .or(`code.eq.${code},unique_code.eq.${code}`)
+      .select('id, code')
+      .eq('code', code)
       .maybeSingle();
 
     if (data) {
       return {
         id: data.id,
-        code: data.code || data.unique_code || code,
+        code: data.code || code,
         name: 'Affiliate Partner',
         commission_rate: 10,
       };
