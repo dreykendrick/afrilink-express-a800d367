@@ -53,6 +53,39 @@ export type Database = {
           },
         ]
       }
+      affiliate_links: {
+        Row: {
+          affiliate_id: string
+          clicks: number
+          code: string
+          commission_earned: number
+          conversions: number
+          created_at: string
+          id: string
+          product_id: string
+        }
+        Insert: {
+          affiliate_id: string
+          clicks?: number
+          code: string
+          commission_earned?: number
+          conversions?: number
+          created_at?: string
+          id?: string
+          product_id: string
+        }
+        Update: {
+          affiliate_id?: string
+          clicks?: number
+          code?: string
+          commission_earned?: number
+          conversions?: number
+          created_at?: string
+          id?: string
+          product_id?: string
+        }
+        Relationships: []
+      }
       affiliates: {
         Row: {
           code: string
@@ -540,53 +573,45 @@ export type Database = {
       }
       products: {
         Row: {
-          created_at: string
-          description: string | null
+          category: string
+          commission: number
           id: string
-          images: string[] | null
-          is_active: boolean
-          name: string
+          image_url: string | null
+          image_urls: string[] | null
+          is_available: boolean
           price: number
-          short_description: string | null
           slug: string
-          updated_at: string
+          status: "pending" | "approved"
+          title: string
           vendor_id: string
         }
         Insert: {
-          created_at?: string
-          description?: string | null
+          category: string
+          commission: number
           id?: string
-          images?: string[] | null
-          is_active?: boolean
-          name: string
+          image_url?: string | null
+          image_urls?: string[] | null
+          is_available?: boolean
           price: number
-          short_description?: string | null
           slug: string
-          updated_at?: string
+          status?: "pending" | "approved"
+          title: string
           vendor_id: string
         }
         Update: {
-          created_at?: string
-          description?: string | null
+          category?: string
+          commission?: number
           id?: string
-          images?: string[] | null
-          is_active?: boolean
-          name?: string
+          image_url?: string | null
+          image_urls?: string[] | null
+          is_available?: boolean
           price?: number
-          short_description?: string | null
           slug?: string
-          updated_at?: string
+          status?: "pending" | "approved"
+          title?: string
           vendor_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "products_vendor_id_fkey"
-            columns: ["vendor_id"]
-            isOneToOne: false
-            referencedRelation: "vendors"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       same_city_zones: {
         Row: {
