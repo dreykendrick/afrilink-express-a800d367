@@ -180,11 +180,13 @@ async function forwardOrderToService(
   orderId: string,
   paymentReference: string | null,
 ): Promise<string | null> {
-  // Load order + product + vendor needed by the Order Service payload
+  // Load the checkout order first. Product/vendor details live in the shared
+  // Winger schema, where products use title and vendor profiles are keyed by
+  // vendor_profiles.user_id, not an old products.name -> vendors join.
   const { data: order, error: orderErr } = await admin
     .from("orders")
     .select(
-      "id, order_number, external_forwarded_at, tracking_url, product_id, buyer_name, buyer_phone, delivery_address, item_price, delivery_fee, total_amount, products(name, vendor_id, vendors(phone))",
+      "id, order_number, external_forwarded_at, tracking_url, product_id, buyer_name, buyer_phone, delivery_address, item_price, delivery_fee, total_amount, affiliate_rate_at_purchase",
     )
     .eq("id", orderId)
     .single();
@@ -200,14 +202,33 @@ async function forwardOrderToService(
     return order.tracking_url ?? null;
   }
 
-  const product = (order as any).products ?? {};
-  const vendor = product.vendors ?? {};
+  const { data: product, error: productErr } = await admin
+    .from("products")
+    .select("id, title, vendor_id, commission")
+    .eq("id", order.product_id)
+    .maybeSingle();
+
+  if (productErr || !product) {
+    console.error("[OrderService] Failed to load product for forwarding:", productErr);
+    return null;
+  }
+
+  const { data: vendorProfile, error: vendorErr } = await admin
+    .from("vendor_profiles")
+    .select("business_name")
+    .eq("user_id", product.vendor_id)
+    .maybeSingle();
+
+  if (vendorErr) {
+    console.warn("[OrderService] Failed to load vendor profile for forwarding:", vendorErr.message);
+  }
 
   const payload = {
     product_id: order.product_id,
-    product_name: product.name ?? "",
-    vendor_id: product.vendor_id ?? null,
-    vendor_phone: vendor.phone ?? null,
+    product_name: product.title ?? "Product",
+    vendor_id: product.vendor_id,
+    vendor_phone: null,
+    vendor_business_name: vendorProfile?.business_name ?? null,
     customer_name: order.buyer_name,
     customer_phone: order.buyer_phone,
     delivery_address: order.delivery_address,
@@ -215,6 +236,8 @@ async function forwardOrderToService(
     delivery_fee: order.delivery_fee,
     total_amount: order.total_amount,
     payment_reference: paymentReference ?? order.order_number ?? orderId,
+    quantity: 1,
+    affiliate_commission_pct: Number(order.affiliate_rate_at_purchase ?? product.commission ?? 0) * 100,
   };
 
   const bodyStr = JSON.stringify(payload);
@@ -248,7 +271,7 @@ async function forwardOrderToService(
         const body = await res.json().catch(() => ({}));
         const trackingUrl = body?.tracking_url ?? null;
         const trackingToken = body?.tracking_token ?? null;
-        const externalOrderId = body?.order_id ?? null;
+        const externalOrderId = body?.id ?? body?.order_id ?? null;
 
         await admin
           .from("orders")
