@@ -40,6 +40,36 @@ async function localFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
 // ---- Product ----
 
+async function fetchVendorLocation(vendorId?: string | null): Promise<Record<string, unknown> | null> {
+  if (!vendorId) return null;
+
+  const vendorUrl = new URL(`${SUPABASE_URL}/rest/v1/vendor_profiles`);
+  vendorUrl.searchParams.set('select', 'user_id,business_name,city,pickup_location,vendor_address,vendor_lat,vendor_lng');
+  vendorUrl.searchParams.set('user_id', `eq.${vendorId}`);
+  vendorUrl.searchParams.set('limit', '1');
+
+  try {
+    const res = await fetch(vendorUrl.toString(), {
+      headers: {
+        'apikey': LOCAL_ANON_KEY,
+        'Authorization': `Bearer ${LOCAL_ANON_KEY}`,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!res.ok) {
+      console.warn(`Vendor profile lookup failed (${res.status}); checkout will fall back to product fields.`);
+      return null;
+    }
+
+    const rows = await res.json();
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  } catch (err) {
+    console.warn('Vendor profile lookup failed; checkout will fall back to product fields:', err);
+    return null;
+  }
+}
+
 export async function fetchProduct(idOrSlug: string): Promise<Product> {
   const decoded = decodeURIComponent(idOrSlug).trim();
   const normalizedSlug = decoded.replace(/\s+/g, '-');
@@ -68,7 +98,9 @@ export async function fetchProduct(idOrSlug: string): Promise<Product> {
     if (res.ok) {
       const rows = await res.json();
       if (Array.isArray(rows) && rows.length > 0) {
-        return normalizeProduct(rows[0]);
+        const productRow = rows[0];
+        const vendorProfile = await fetchVendorLocation(productRow.vendor_id);
+        return normalizeProduct({ ...productRow, vendor: vendorProfile || productRow.vendor });
       }
     }
   } catch (err) {
@@ -92,9 +124,9 @@ export async function fetchProduct(idOrSlug: string): Promise<Product> {
 /** Map main-backend field names to our frontend Product type */
 function normalizeProduct(p: any): Product {
   const v = p.vendor ?? {};
-  const vendor_lat = p.vendor_lat ?? v.lat ?? v.vendor_lat ?? null;
-  const vendor_lng = p.vendor_lng ?? v.lng ?? v.vendor_lng ?? null;
-  const vendor_address = p.vendor_address ?? v.address ?? v.vendor_address ?? null;
+  const vendor_lat = p.vendor_lat ?? v.vendor_lat ?? v.lat ?? null;
+  const vendor_lng = p.vendor_lng ?? v.vendor_lng ?? v.lng ?? null;
+  const vendor_address = p.vendor_address ?? v.vendor_address ?? v.pickup_location ?? v.address ?? null;
 
   const parsedLat = vendor_lat != null ? Number(vendor_lat) : null;
   const parsedLng = vendor_lng != null ? Number(vendor_lng) : null;
